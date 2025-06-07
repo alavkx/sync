@@ -1,21 +1,19 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from "@tanstack/react-router";
 
 export default function Header() {
   return (
-    <header className="p-2 flex gap-2 bg-white text-black justify-between">
-      <nav className="flex flex-row">
-        <div className="px-2 font-bold">
-          <Link to="/">Home</Link>
+    <header className="p-4 bg-white shadow-sm border-b border-gray-200">
+      <nav className="flex items-center justify-between max-w-6xl mx-auto">
+        <div className="flex items-center space-x-4">
+          <h1 className="text-xl font-bold text-gray-800">
+            <Link to="/" className="hover:text-blue-600">
+              Code Review Tool
+            </Link>
+          </h1>
         </div>
 
-        <div className="px-2 font-bold">
-          <Link to="/demo/start/server-funcs">Start - Server Functions</Link>
-        </div>
-
-        <div className="px-2 font-bold">
-          <Link to="/demo/start/api-request">Start - API Request</Link>
-        </div>
+        <div className="text-sm text-gray-600">Sync Engine Demo</div>
       </nav>
     </header>
-  )
+  );
 }

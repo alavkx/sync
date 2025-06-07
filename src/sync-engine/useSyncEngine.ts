@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { SimpleSyncEngine, type SyncState } from "./sync-engine";
+import { SimpleSyncEngine } from "./SyncEngine";
+import type { ClientID, SyncState } from "./types";
 
-export function useSyncEngine(clientId: string) {
+export function useSyncEngine(clientId: ClientID) {
   const [engine] = useState(() => new SimpleSyncEngine(clientId));
   const [state, setState] = useState<SyncState | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     // Initial state load
-    engine.getState().then(setState);
+    setState(engine.getState());
 
     // Subscribe to state changes
     engine.onStateChange(setState);
@@ -26,10 +27,28 @@ export function useSyncEngine(clientId: string) {
   }, [engine]);
 
   return {
+    // Raw engine access
+    engine,
+
+    // State
     state,
     error,
-    applyChange: engine.applyChange.bind(engine),
+
+    // Core operations
+    create: engine.create.bind(engine),
+    update: engine.update.bind(engine),
+    delete: engine.delete.bind(engine),
+
+    // Query operations
+    get: engine.get.bind(engine),
+    getByType: engine.getByType.bind(engine),
+    query: engine.query.bind(engine),
+
+    // Sync operations
     push: engine.push.bind(engine),
     pull: engine.pull.bind(engine),
+
+    // Event subscriptions
+    onEntityChange: engine.onEntityChange.bind(engine),
   };
 }
