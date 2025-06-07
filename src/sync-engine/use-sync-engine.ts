@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { SimpleSyncEngine } from "./SyncEngine";
-import type { SyncState } from "./types";
+import { SimpleSyncEngine, type SyncState } from "./sync-engine";
 
 export function useSyncEngine(clientId: string) {
   const [engine] = useState(() => new SimpleSyncEngine(clientId));

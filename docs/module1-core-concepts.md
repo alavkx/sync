@@ -2,99 +2,129 @@
 
 ## 1. The Big Picture
 
-### Understanding the Sync Problem Space
+### Understanding Sync in Code Review Context
 
-The sync problem space is fundamentally about managing data consistency across multiple devices and users. Here are the key challenges:
+Code review tools present unique synchronization challenges that make them perfect for learning sync engine concepts:
 
-1. **Network Uncertainty**
+1. **Multi-User Collaboration**
 
-   - Intermittent connectivity
-   - Variable latency
-   - Bandwidth constraints
-   - Connection failures
+   - Multiple developers reviewing the same code
+   - Real-time comment discussions
+   - Concurrent approval/rejection decisions
+   - Shared viewing of diffs and file changes
 
-2. **Concurrent Modifications**
+2. **Comment Synchronization**
 
-   - Multiple users editing the same data
-   - Same user on multiple devices
-   - Background processes and automated updates
+   - Inline comments on specific lines
+   - Comment threads and replies
+   - Edit/delete operations on existing comments
+   - Real-time visibility of new comments
 
-3. **State Management**
-   - Local state vs. server state
-   - Conflict resolution
-   - Version tracking
-   - Data consistency guarantees
+3. **Review State Management**
+   - Approval status changes
+   - Review completion tracking
+   - Status conflicts (multiple reviewers)
+   - Atomic review submissions
 
-### Why We Need Sync Engines
+### Why Code Reviews Need Sync Engines
 
-Sync engines solve these problems by providing:
+Traditional code review tools face several synchronization problems:
 
-1. **Offline Support**
+1. **Stale State Problems**
 
-   - Local data access without network
-   - Background synchronization
-   - Conflict resolution when back online
+   - Reviewer A adds a comment, but Reviewer B doesn't see it
+   - Review status appears "pending" when it's actually "approved"
+   - Outdated diff views showing old code
 
-2. **Real-time Updates**
+2. **Collaboration Friction**
 
-   - Instant local changes
-   - Background server synchronization
-   - Efficient update propagation
+   - Comments lost during page refreshes
+   - No real-time feedback during review sessions
+   - Conflicting review decisions
 
-3. **Consistency Guarantees**
-   - Eventual consistency
-   - Conflict resolution strategies
-   - Data integrity preservation
+3. **Offline/Connectivity Issues**
+   - Comments composed offline aren't saved
+   - Network failures lose review progress
+   - Mobile reviewing without reliable connectivity
 
-### Replicache's High-Level Architecture
+### Code Review Sync Engine Architecture
 
-Replicache implements a sophisticated sync architecture with three main components:
+Our sync engine will solve these problems with three core components:
 
-1. **Client-Side Store**
+1. **Client-Side Comment Store**
 
-   - In-browser persistent key-value store
-   - Git-like versioning system
-   - Local state management
-   - Background sync capabilities
+   - Local comment cache for instant responses
+   - Optimistic UI updates for immediate feedback
+   - Offline comment composition and storage
+   - Background sync with conflict resolution
 
-2. **Server-Side Components**
+2. **Server-Side Review State**
 
-   - Push endpoint for receiving client changes
-   - Pull endpoint for sending server updates
-   - Poke system for real-time notifications
-   - Database integration
+   - Centralized comment storage and versioning
+   - Review status coordination across clients
+   - Conflict resolution for concurrent edits
+   - Push/pull endpoints for synchronization
 
-3. **Sync Protocol**
-   - Bidirectional sync
-   - Optimistic updates
-   - Conflict resolution
-   - Version tracking
+3. **Real-time Sync Protocol**
+   - Comment push: Client → Server new/edited comments
+   - Comment pull: Server → Client remote comments
+   - Status updates: Real-time review state changes
+   - Presence: Show active reviewers and their focus
 
-### Key Components: Client, Server, and Sync Protocol
+### Key Components: Comments, Reviews, and Sync Protocol
 
-#### Client Components
+#### Comment System Components
 
-- **Replicache Instance**: The main client-side store
-- **Client View**: The current state of the data
-- **Mutators**: Functions that modify the data
-- **Subscriptions**: React to data changes
+- **Comment Store**: Local cache of all comments with metadata
+- **Comment Editor**: UI for creating/editing inline comments
+- **Comment Renderer**: Display comments with proper threading
+- **Sync Manager**: Handles comment synchronization logic
 
-#### Server Components
+#### Review State Components
 
-- **Push Endpoint**: Receives and processes client changes
-- **Pull Endpoint**: Sends updates to clients
-- **Poke System**: Notifies clients of changes
-- **Database**: Stores the canonical state
+- **Review Status**: Current approval/rejection state
+- **Reviewer Presence**: Track active reviewers and their locations
+- **Diff Viewer**: Consistent code diff rendering across clients
+- **Review Actions**: Approve, reject, submit operations
 
-#### Sync Protocol
+#### Sync Protocol Components
 
-- **Push**: Client → Server changes
-- **Pull**: Server → Client updates
-- **Poke**: Server → Client notifications
-- **Cookie-based Versioning**: Tracks sync state
+- **Push Operations**: Send local changes to server
+  - New comments
+  - Comment edits/deletes
+  - Review status changes
+- **Pull Operations**: Receive remote changes from server
+
+  - Comments from other reviewers
+  - Review status updates
+  - Diff updates (if code changes)
+
+- **Conflict Resolution**: Handle concurrent modifications
+  - Comment edit conflicts
+  - Review status conflicts
+  - Optimistic update rollbacks
+
+## Practical Example: Comment Synchronization Flow
+
+Let's trace through a real code review scenario:
+
+1. **Developer A** opens a pull request for review
+2. **Reviewer B** adds an inline comment: "This could be optimized"
+3. **Reviewer C** simultaneously adds a comment on the same line
+4. Our sync engine handles this by:
+   - Locally storing B's comment immediately (optimistic UI)
+   - Pushing B's comment to server in background
+   - Pulling C's comment when it arrives
+   - Resolving any display conflicts (both comments shown)
+   - Maintaining consistent comment ordering across all clients
 
 ## Next Steps
 
-In the next section, we'll dive deeper into the Client-Side Architecture, exploring how Replicache manages local state and handles persistence.
+In the next module, we'll implement our first sync component: the **Comment Synchronization System**. We'll build:
 
-[Continue to Client-Side Architecture →]
+- Comment data structures and storage
+- Optimistic comment UI updates
+- Push/pull synchronization for comments
+- Basic conflict resolution
+
+[Continue to Comment Synchronization System →]

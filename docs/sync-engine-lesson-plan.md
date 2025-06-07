@@ -1,91 +1,115 @@
-# Understanding Sync Engines with Replicache
+# Understanding Sync Engines Through Building a Code Review Tool
 
-A comprehensive guide to understanding sync engines, using Replicache as our case study.
+A comprehensive guide to understanding sync engines by implementing a real-world code review application.
+
+## Teaching Strategy
+
+We'll learn sync engine concepts by building a **Code Review Tool** that naturally requires synchronization:
+
+- **Comments** must sync across reviewers in real-time
+- **Review status** updates need immediate propagation
+- **Diff viewing** should be consistent across users
+- **Collaborative editing** of review feedback
+- **Offline support** for reviewing code without connectivity
+
+This practical approach demonstrates sync engine concepts through concrete, relatable examples rather than abstract theory.
 
 ## Module 1: Core Concepts & Architecture
 
 1. **The Big Picture**
 
-   - Understanding the sync problem space
-   - Why we need sync engines
-   - Replicache's high-level architecture
-   - Key components: Client, Server, and Sync Protocol
+   - Understanding sync in code review context
+   - Why code reviews need sync engines
+   - Multi-user collaboration challenges
+   - Real-time vs. eventual consistency trade-offs
 
-2. **Client-Side Architecture**
-   - Client View concept
-   - Client Groups and Caches
-   - Local state management
-   - Persistence strategies
+2. **Code Review Sync Architecture**
+   - Comment synchronization patterns
+   - Review state management
+   - Diff consistency across clients
+   - User presence and activity tracking
 
-## Module 2: Data Flow & Operations
+## Module 2: Comment Synchronization System
 
-1. **Mutations & Changes**
+1. **Comment Operations & Changes**
 
-   - Understanding mutators
-   - Local execution model
-   - Speculative execution
-   - Change tracking and ordering
+   - Adding inline comments to code lines
+   - Editing and deleting comments
+   - Comment threading and replies
+   - Optimistic UI updates
 
-2. **Sync Protocol Deep Dive**
-   - Push mechanism
-   - Pull mechanism
-   - Poke system
-   - Cookie-based versioning
+2. **Real-time Comment Sync**
+   - Push: Local comments to server
+   - Pull: Remote comments from server
+   - Conflict resolution for comment edits
+   - Comment ordering and versioning
 
-## Module 3: Advanced Concepts
+## Module 3: Review State Management
 
-1. **Conflict Resolution**
+1. **Review Status Synchronization**
 
-   - Understanding merge conflicts
-   - Rebase operations
-   - Conflict resolution strategies
-   - Application-specific resolution patterns
+   - Approval/rejection state changes
+   - Review completion tracking
+   - Status conflict resolution
+   - Atomic review submissions
 
 2. **Performance & Optimization**
-   - Batching strategies
-   - Network optimization
-   - Storage considerations
-   - Real-time vs. eventual consistency
+   - Batching comment operations
+   - Selective diff loading
+   - Comment caching strategies
+   - Network-aware sync timing
 
-## Module 4: Implementation Patterns
+## Module 4: Advanced Sync Patterns
 
-1. **Backend Strategies**
+1. **Collaborative Features**
 
-   - Database integration
-   - Version tracking
-   - State management
-   - Error handling
+   - Multiple reviewers on same diff
+   - Real-time cursor/selection sharing
+   - Comment collision detection
+   - User presence indicators
 
-2. **Frontend Integration**
-   - React integration patterns
-   - Subscription models
-   - UI update strategies
-   - Offline support
+2. **Offline & Reliability**
+   - Offline comment composition
+   - Sync resume after connectivity loss
+   - Conflict resolution UI
+   - Data integrity guarantees
 
-## Module 5: Real-World Applications
+## Module 5: Production Implementation
 
-1. **Use Cases & Patterns**
+1. **Code Review Tool Architecture**
 
-   - Collaborative editing
-   - Real-time updates
-   - Offline-first applications
-   - Multi-device sync
+   - Git integration for diffs
+   - Database schema for comments/reviews
+   - API design for sync operations
+   - Frontend state management
 
-2. **Best Practices & Pitfalls**
-   - Common challenges
-   - Performance considerations
-   - Security implications
-   - Testing strategies
+2. **Testing & Deployment**
+   - Sync engine testing strategies
+   - Multi-user scenario testing
+   - Performance monitoring
+   - Error recovery patterns
 
 ## Learning Resources
 
 - [Replicache Documentation](http://doc.replicache.dev/concepts/how-it-works)
-- Additional resources will be added as we progress through the modules
+- Code Review Tool PRD (see `docs/prd.md`)
+- Git diff parsing examples
+- Real-time collaboration patterns
 
 ## Progress Tracking
 
 - [🔄] Module 1: Core Concepts & Architecture (In Progress)
-- [ ] Module 2: Data Flow & Operations
-- [ ] Module 3: Advanced Concepts
-- [ ] Module 4: Implementation Patterns
-- [ ] Module 5: Real-World Applications
+- [ ] Module 2: Comment Synchronization System
+- [ ] Module 3: Review State Management
+- [ ] Module 4: Advanced Sync Patterns
+- [ ] Module 5: Production Implementation
+
+## Project Deliverables
+
+By the end of this course, you'll have built:
+
+- ✅ A complete sync engine from scratch
+- ✅ A functional code review tool
+- ✅ Real-time comment synchronization
+- ✅ Offline-capable review workflow
+- ✅ Production-ready architecture patterns
