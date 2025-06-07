@@ -32,7 +32,7 @@ export const ChangeSchema = z.object({
   timestamp: z.number().int().positive(),
   entityId: EntityIDSchema,
   entityType: EntityTypeSchema,
-  operation: z.enum(["create", "update", "delete"]),
+  operation: z.enum(["upsert", "delete"]),
   data: z.record(z.any()),
   previousData: z.record(z.any()).optional(),
 });
@@ -49,17 +49,27 @@ export const SyncStateSchema = z.object({
 
 export type SyncState = z.infer<typeof SyncStateSchema>;
 
+// Query specification for unified query interface
+export interface QuerySpec {
+  entityType?: EntityType;
+  entityId?: EntityID;
+  where?: (entity: SyncEntity) => boolean;
+  orderBy?: keyof SyncEntity;
+  limit?: number;
+}
+
 // Generic sync engine interface
 export interface SyncEngine {
   // Core operations
-  create(entityType: EntityType, data: Record<string, any>): Promise<EntityID>;
-  update(entityId: EntityID, data: Record<string, any>): Promise<void>;
+  upsert(
+    entityId: EntityID,
+    entityType: EntityType,
+    data: Record<string, any>
+  ): Promise<void>;
   delete(entityId: EntityID): Promise<void>;
 
   // Query operations
-  get(entityId: EntityID): SyncEntity | null;
-  getByType(entityType: EntityType): SyncEntity[];
-  query(predicate: (entity: SyncEntity) => boolean): SyncEntity[];
+  query(querySpec: QuerySpec): Promise<SyncEntity[]>;
 
   // Sync operations
   push(): Promise<void>;
