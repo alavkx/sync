@@ -84,24 +84,6 @@ export function loadDemoData() {
   console.log(`Created 1 project, 1 todo, and 1 comment`);
 }
 
-// Helper functions for creating entities
-export function createProject(
-  id: string,
-  name: string,
-  description: string
-): Entity {
-  return {
-    id,
-    type: "project",
-    data: {
-      name,
-      description,
-      status: "active",
-    },
-    updatedAt: Date.now(),
-  };
-}
-
 export function createTask(
   id: string,
   projectId: string,
@@ -117,22 +99,6 @@ export function createTask(
       description,
       status: "pending",
       priority: "medium",
-    },
-    updatedAt: Date.now(),
-  };
-}
-
-export function createComment(
-  id: string,
-  taskId: string,
-  message: string
-): Entity {
-  return {
-    id,
-    type: "comment",
-    data: {
-      taskId,
-      message,
     },
     updatedAt: Date.now(),
   };
