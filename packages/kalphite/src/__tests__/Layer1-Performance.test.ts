@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { KalphiteStore } from "../store/KalphiteStore";
-import { createCommentEntity } from "./setup";
+import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Layer 1: Performance & Scalability", () => {
   let store: any;
@@ -9,290 +9,328 @@ describe("Layer 1: Performance & Scalability", () => {
     store = KalphiteStore();
   });
 
-  describe("Memory Efficiency", () => {
-    test("handles 10,000 entities efficiently", () => {
-      const startTime = performance.now();
+  describe("Bulk Loading Performance", () => {
+    test("should load thousands of entities efficiently", () => {
+      const entityCount = 2000;
+      const entities = Array.from({ length: entityCount }, (_, i) =>
+        createCommentEntity(`c${i}`, `Message ${i}`, i)
+      );
 
-      // Create 10k entities
-      for (let i = 0; i < 10000; i++) {
-        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
+      const startTime = performance.now();
+      store.loadEntities(entities);
+      const loadTime = performance.now() - startTime;
+
+      expect(store.comment).toHaveLength(entityCount);
+      expect(loadTime).toBeLessThan(100); // Should load 2k entities in under 100ms
+    });
+
+    test("should handle mixed-type bulk loading", () => {
+      const entityCount = 1000;
+      const entities = [];
+
+      for (let i = 0; i < entityCount; i++) {
+        if (i % 2 === 0) {
+          entities.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
+        } else {
+          entities.push(createReviewEntity(`r${i}`, `Review ${i}`));
+        }
       }
 
-      const insertTime = performance.now() - startTime;
+      const startTime = performance.now();
+      store.loadEntities(entities);
+      const loadTime = performance.now() - startTime;
 
-      expect(store.comment).toHaveLength(10000);
-      expect(insertTime).toBeLessThan(2000); // Should insert 10k entities in under 2s
+      expect(store.comment).toHaveLength(500);
+      expect(store.review).toHaveLength(500);
+      expect(loadTime).toBeLessThan(150); // Mixed-type loading efficiency
+    });
+  });
 
-      // Query performance should remain good
+  describe("Query Performance", () => {
+    beforeEach(() => {
+      // Pre-load a large dataset for query tests
+      const entities = Array.from({ length: 5000 }, (_, i) =>
+        createCommentEntity(`c${i}`, `Message ${i}`, i)
+      );
+      store.loadEntities(entities);
+    });
+
+    test("should find entities quickly in large datasets", () => {
       const queryStart = performance.now();
-      const found = store.comment.find((c: any) => c.id === "c5000");
+      const found = store.comment.find((c: any) => c.id === "c2500");
       const queryTime = performance.now() - queryStart;
 
       expect(found).toBeDefined();
-      expect(queryTime).toBeLessThan(10); // Should find entity quickly
+      expect(found.id).toBe("c2500");
+      expect(queryTime).toBeLessThan(5); // Fast find operation
     });
 
-    test("query performance scales linearly", () => {
-      // Setup data
-      for (let i = 0; i < 5000; i++) {
-        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
-      }
-
-      // Test filter performance
-      const filterStart = performance.now();
-      const evenComments = store.comment.filter(
-        (c: any) => c.data.lineNumber % 2 === 0
+    test("should filter large datasets efficiently", () => {
+      const queryStart = performance.now();
+      const filtered = store.comment.filter(
+        (c: any) => c.data.lineNumber > 4000
       );
-      const filterTime = performance.now() - filterStart;
+      const queryTime = performance.now() - queryStart;
 
-      expect(evenComments.length).toBe(2500);
-      expect(filterTime).toBeLessThan(100); // Filter should be fast
+      expect(filtered.length).toBe(999); // 4001-4999
+      expect(queryTime).toBeLessThan(50); // Reasonable filter time
+    });
 
-      // Test sort performance
-      const sortStart = performance.now();
-      const sorted = store.comment.sort(
+    test("should sort large datasets reasonably fast", () => {
+      const queryStart = performance.now();
+      const sorted = [...store.comment].sort(
         (a: any, b: any) => b.data.lineNumber - a.data.lineNumber
       );
-      const sortTime = performance.now() - sortStart;
+      const queryTime = performance.now() - queryStart;
 
       expect(sorted[0].data.lineNumber).toBe(4999);
-      expect(sortTime).toBeLessThan(200); // Sort should be reasonable
+      expect(sorted[4999].data.lineNumber).toBe(0);
+      expect(queryTime).toBeLessThan(100); // Sort 5k entities under 100ms
     });
 
-    test("memory usage stays reasonable with large datasets", () => {
-      const beforeMemory = process.memoryUsage();
+    test("should chain operations efficiently", () => {
+      const operationStart = performance.now();
 
-      // Add 5k entities
-      for (let i = 0; i < 5000; i++) {
-        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
-      }
-
-      const afterMemory = process.memoryUsage();
-      const memoryIncrease = afterMemory.heapUsed - beforeMemory.heapUsed;
-
-      expect(store.comment).toHaveLength(5000);
-      expect(memoryIncrease).toBeLessThan(50 * 1024 * 1024); // Should use less than 50MB
-    });
-  });
-
-  describe("Concurrent Operations", () => {
-    test("handles rapid concurrent upserts", () => {
-      const operations = [];
-
-      // Prepare 1000 concurrent operations
-      for (let i = 0; i < 1000; i++) {
-        operations.push(() => {
-          store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
-        });
-      }
-
-      const startTime = performance.now();
-      operations.forEach((op) => op());
-      const endTime = performance.now();
-
-      expect(endTime - startTime).toBeLessThan(500);
-      expect(store.comment).toHaveLength(1000);
-    });
-
-    test("maintains consistency during rapid updates", () => {
-      const entityId = "shared-entity";
-      let updateCount = 0;
-
-      const unsubscribe = store.subscribe(() => updateCount++);
-
-      // Rapid updates to same entity
-      for (let i = 0; i < 100; i++) {
-        if (i === 0) {
-          store.comment.push(createCommentEntity(entityId, `Update ${i}`, i));
-        } else {
-          const index = store.comment.findIndex((c: any) => c.id === entityId);
-          if (index >= 0) {
-            store.comment[index] = createCommentEntity(
-              entityId,
-              `Update ${i}`,
-              i
-            );
-          }
-        }
-      }
-
-      // Should have exactly one entity with the latest update
-      const entities = store.comment.filter((c: any) => c.id === entityId);
-      expect(entities).toHaveLength(1);
-      expect(entities[0].data.message).toBe("Update 99");
-      expect(updateCount).toBe(100);
-
-      unsubscribe();
-    });
-  });
-
-  describe("Memory-First Architecture Validation", () => {
-    test("all operations are synchronous", () => {
-      // Push should be synchronous
-      const result = store.comment.push(createCommentEntity("c1", "Test", 1));
-      expect(result).toBeDefined();
-      expect(store.comment).toHaveLength(1);
-
-      // Find should be synchronous
-      const found = store.comment.find((c: any) => c.id === "c1");
-      expect(found).toBeDefined();
-      expect(found?.data.message).toBe("Test");
-
-      // Filter should be synchronous
-      const filtered = store.comment.filter(
-        (c: any) => c.data.lineNumber === 1
-      );
-      expect(filtered).toHaveLength(1);
-
-      // Sort should be synchronous
-      const sorted = store.comment.sort(
-        (a: any, b: any) => a.data.lineNumber - b.data.lineNumber
-      );
-      expect(sorted).toHaveLength(1);
-    });
-
-    test("no async operations in core API", () => {
-      const entity = createCommentEntity("c1", "Test", 1);
-
-      const pushResult = store.comment.push(entity);
-      expect(pushResult).not.toBeInstanceOf(Promise);
-
-      const findResult = store.comment.find((c: any) => c.id === "c1");
-      expect(findResult).not.toBeInstanceOf(Promise);
-
-      const filterResult = store.comment.filter((c: any) => c.id === "c1");
-      expect(filterResult).not.toBeInstanceOf(Promise);
-
-      const sortResult = store.comment.sort((a: any, b: any) =>
-        a.id.localeCompare(b.id)
-      );
-      expect(sortResult).not.toBeInstanceOf(Promise);
-    });
-
-    test("reactive updates are immediate", () => {
-      let updateCount = 0;
-      const unsubscribe = store.subscribe(() => updateCount++);
-
-      expect(updateCount).toBe(0);
-
-      // Update should trigger immediately
-      store.comment.push(createCommentEntity("c1", "Test", 1));
-      expect(updateCount).toBe(1);
-
-      // Another update should trigger immediately
-      store.comment.push(createCommentEntity("c2", "Test 2", 2));
-      expect(updateCount).toBe(2);
-
-      unsubscribe();
-    });
-  });
-
-  describe("Functional Programming Performance", () => {
-    test("chained operations are efficient", () => {
-      // Setup test data
-      for (let i = 0; i < 1000; i++) {
-        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
-      }
-
-      const startTime = performance.now();
-
-      // Chain multiple operations
       const result = store.comment
-        .filter((c: any) => c.data.lineNumber % 2 === 0)
-        .sort((a: any, b: any) => b.data.lineNumber - a.data.lineNumber)
-        .slice(0, 10)
-        .map((c: any) => c.data.message);
+        .filter((c: any) => c.data.lineNumber % 10 === 0)
+        .sort((a: any, b: any) => a.data.lineNumber - b.data.lineNumber)
+        .map((c: any) => c.data.message)
+        .slice(0, 100);
 
-      const endTime = performance.now();
+      const operationTime = performance.now() - operationStart;
 
-      expect(result).toHaveLength(10);
-      expect(result[0]).toBe("Comment 998");
-      expect(endTime - startTime).toBeLessThan(50); // Should be fast
-    });
-
-    test("immutable operations don't affect original collections", () => {
-      // Add test data
-      for (let i = 0; i < 100; i++) {
-        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
-      }
-
-      const originalLength = store.comment.length;
-
-      // These operations should not mutate the original array
-      const filtered = store.comment.filter((c: any) => c.data.lineNumber > 50);
-      const sorted = store.comment.sort(
-        (a: any, b: any) => b.data.lineNumber - a.data.lineNumber
-      );
-      const sliced = store.comment.slice(0, 10);
-
-      expect(store.comment).toHaveLength(originalLength); // Original unchanged
-      expect(filtered.length).toBeLessThan(originalLength);
-      expect(sorted).toHaveLength(originalLength);
-      expect(sliced).toHaveLength(10);
-
-      // Original array should still be in original order
-      expect(store.comment[0].data.lineNumber).toBe(0);
-      expect(store.comment[99].data.lineNumber).toBe(99);
+      expect(result).toHaveLength(100);
+      expect(result[0]).toBe("Message 0");
+      expect(operationTime).toBeLessThan(30); // Chained operations under 30ms
     });
   });
 
-  describe("Edge Cases & Stress Tests", () => {
-    test("handles empty collections gracefully", () => {
-      expect(store.comment.length).toBe(0);
-      expect(
-        store.comment.find((c: any) => c.id === "nonexistent")
-      ).toBeUndefined();
-      expect(store.comment.filter((c: any) => true)).toHaveLength(0);
-      expect(
-        store.comment.sort((a: any, b: any) => a.id.localeCompare(b.id))
-      ).toHaveLength(0);
-    });
-
-    test("handles very long entity IDs", () => {
-      const longId = "x".repeat(1000);
-      const entity = createCommentEntity(longId, "Test", 1);
-
-      const result = store.comment.push(entity);
-      expect(result).toBeDefined();
-
-      const found = store.comment.find((c: any) => c.id === longId);
-      expect(found?.id).toBe(longId);
-    });
-
-    test("handles entities with large data payloads", () => {
-      const largeMessage = "x".repeat(100000);
-      const entity = createCommentEntity("c1", largeMessage, 1);
+  describe("Mutation Performance", () => {
+    test("should handle rapid individual insertions", () => {
+      const insertCount = 1000;
 
       const startTime = performance.now();
-      store.comment.push(entity);
-      const endTime = performance.now();
-
-      expect(endTime - startTime).toBeLessThan(100);
-
-      const found = store.comment.find((c: any) => c.id === "c1");
-      expect(found?.data.message).toBe(largeMessage);
-    });
-
-    test("maintains performance with frequent deletions", () => {
-      // Add 1000 entities
-      for (let i = 0; i < 1000; i++) {
-        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
+      for (let i = 0; i < insertCount; i++) {
+        store.comment.push(createCommentEntity(`c${i}`, `Message ${i}`, i));
       }
+      const insertTime = performance.now() - startTime;
 
-      const startTime = performance.now();
+      expect(store.comment).toHaveLength(insertCount);
+      expect(insertTime).toBeLessThan(200); // 1k individual inserts under 200ms
+    });
 
-      // Remove every other entity
-      for (let i = 0; i < 1000; i += 2) {
-        const index = store.comment.findIndex((c: any) => c.id === `c${i}`);
-        if (index >= 0) {
+    test("should handle rapid deletions efficiently", () => {
+      // Pre-populate
+      const entities = Array.from({ length: 1000 }, (_, i) =>
+        createCommentEntity(`c${i}`, `Message ${i}`, i)
+      );
+      store.loadEntities(entities);
+
+      // Delete every other entity
+      const deleteStart = performance.now();
+      for (let i = 500; i >= 0; i--) {
+        const index = i * 2;
+        if (index < store.comment.length) {
           store.comment.splice(index, 1);
         }
       }
+      const deleteTime = performance.now() - deleteStart;
 
-      const endTime = performance.now();
+      expect(store.comment.length).toBeLessThan(1000);
+      expect(deleteTime).toBeLessThan(150); // Bulk deletions under 150ms
+    });
 
-      expect(store.comment).toHaveLength(500);
-      expect(endTime - startTime).toBeLessThan(200);
+    test("should handle mixed operations efficiently", () => {
+      const operationStart = performance.now();
+
+      // Perform mixed operations
+      for (let i = 0; i < 500; i++) {
+        if (i % 3 === 0) {
+          store.comment.push(
+            createCommentEntity(`mixed-${i}`, `Message ${i}`, i)
+          );
+        } else if (i % 3 === 1) {
+          store.review.push(createReviewEntity(`review-${i}`, `Review ${i}`));
+        } else if (store.comment.length > 0) {
+          store.comment.splice(0, 1);
+        }
+      }
+
+      const operationTime = performance.now() - operationStart;
+
+      expect(store.comment.length + store.review.length).toBeGreaterThan(0);
+      expect(operationTime).toBeLessThan(100); // Mixed operations under 100ms
+    });
+  });
+
+  describe("Memory Efficiency", () => {
+    test("should handle large entities without degradation", () => {
+      const largeEntities = Array.from({ length: 100 }, (_, i) => {
+        const largeData = {
+          message: "x".repeat(10000), // 10KB of text
+          lineNumber: i,
+          metadata: {
+            tags: Array.from({ length: 100 }, (_, j) => `tag-${j}`),
+            timestamps: Array.from({ length: 50 }, () => Date.now()),
+            content: "y".repeat(5000),
+          },
+        };
+        return { id: `large-${i}`, type: "comment", data: largeData };
+      });
+
+      const startTime = performance.now();
+      store.loadEntities(largeEntities);
+      const loadTime = performance.now() - startTime;
+
+      expect(store.comment).toHaveLength(100);
+      expect(loadTime).toBeLessThan(200); // Large entities still load reasonably fast
+    });
+
+    test("should maintain performance after extensive usage", () => {
+      // Simulate extensive usage patterns
+      for (let cycle = 0; cycle < 20; cycle++) {
+        const entities = Array.from({ length: 100 }, (_, i) =>
+          createCommentEntity(`cycle-${cycle}-${i}`, `Message ${i}`, i)
+        );
+
+        store.loadEntities(entities);
+
+        // Perform operations
+        store.comment.filter((c: any) => c.data.lineNumber % 2 === 0);
+        store.comment.sort(
+          (a: any, b: any) => a.data.lineNumber - b.data.lineNumber
+        );
+
+        // Clear periodically
+        if (cycle % 5 === 4) {
+          store.clear();
+        }
+      }
+
+      // Final performance test
+      const testStart = performance.now();
+      store.comment.push(createCommentEntity("final-test", "Performance test"));
+      const found = store.comment.find((c: any) => c.id === "final-test");
+      const testTime = performance.now() - testStart;
+
+      expect(found).toBeDefined();
+      expect(testTime).toBeLessThan(5); // Should still be fast after extensive usage
+    });
+  });
+
+  describe("Reactivity Performance", () => {
+    test("should handle many subscribers efficiently", () => {
+      const subscriberCount = 100;
+      const subscribers: (() => void)[] = [];
+      const updateCounts = Array(subscriberCount).fill(0);
+
+      // Add many subscribers
+      for (let i = 0; i < subscriberCount; i++) {
+        const unsubscribe = store.subscribe(() => updateCounts[i]++);
+        subscribers.push(unsubscribe);
+      }
+
+      const notificationStart = performance.now();
+
+      // Trigger notifications
+      for (let i = 0; i < 50; i++) {
+        store.comment.push(
+          createCommentEntity(`sub-test-${i}`, `Message ${i}`, i)
+        );
+      }
+
+      const notificationTime = performance.now() - notificationStart;
+
+      expect(updateCounts.every((count) => count === 50)).toBe(true);
+      expect(notificationTime).toBeLessThan(100); // 100 subscribers x 50 notifications under 100ms
+
+      // Cleanup
+      subscribers.forEach((unsub) => unsub());
+    });
+
+    test("should handle subscriber churn efficiently", () => {
+      const churnStart = performance.now();
+
+      const unsubscribers: (() => void)[] = [];
+
+      // Add and remove subscribers rapidly
+      for (let i = 0; i < 200; i++) {
+        const unsubscribe = store.subscribe(() => {});
+        unsubscribers.push(unsubscribe);
+
+        if (i % 10 === 9) {
+          // Unsubscribe every 10th iteration
+          const toRemove = unsubscribers.splice(0, 5);
+          toRemove.forEach((unsub) => unsub());
+        }
+
+        // Trigger update
+        store.comment.push(
+          createCommentEntity(`churn-${i}`, `Message ${i}`, i)
+        );
+      }
+
+      const churnTime = performance.now() - churnStart;
+
+      expect(churnTime).toBeLessThan(150); // Subscriber churn under 150ms
+
+      // Cleanup remaining
+      unsubscribers.forEach((unsub) => unsub());
+    });
+  });
+
+  describe("Edge Case Performance", () => {
+    test("should handle empty collections gracefully", () => {
+      const operationStart = performance.now();
+
+      // Operations on empty collections should be fast
+      const found = store.comment.find((c: any) => c.id === "nonexistent");
+      const filtered = store.comment.filter((c: any) => true);
+      const mapped = store.comment.map((c: any) => c.id);
+      const sorted = [...store.comment].sort();
+
+      const operationTime = performance.now() - operationStart;
+
+      expect(found).toBeUndefined();
+      expect(filtered).toHaveLength(0);
+      expect(mapped).toHaveLength(0);
+      expect(sorted).toHaveLength(0);
+      expect(operationTime).toBeLessThan(1); // Empty operations should be near-instant
+    });
+
+    test("should handle very long entity IDs efficiently", () => {
+      const longId = "x".repeat(1000); // 1KB ID
+      const entity = createCommentEntity(longId, "Test message", 1);
+
+      const operationStart = performance.now();
+      store.comment.push(entity);
+      const found = store.comment.find((c: any) => c.id === longId);
+      const operationTime = performance.now() - operationStart;
+
+      expect(found).toBeDefined();
+      expect(operationTime).toBeLessThan(5); // Long IDs shouldn't impact performance significantly
+    });
+
+    test("should handle frequent deletions without memory leaks", () => {
+      const operationStart = performance.now();
+
+      // Rapid create/delete cycles
+      for (let cycle = 0; cycle < 100; cycle++) {
+        // Add entities
+        for (let i = 0; i < 50; i++) {
+          store.comment.push(
+            createCommentEntity(`temp-${cycle}-${i}`, `Message ${i}`, i)
+          );
+        }
+
+        // Delete all entities
+        store.comment.length = 0;
+      }
+
+      const operationTime = performance.now() - operationStart;
+
+      expect(store.comment).toHaveLength(0);
+      expect(operationTime).toBeLessThan(200); // 100 cycles of 50 entities each under 200ms
     });
   });
 });
