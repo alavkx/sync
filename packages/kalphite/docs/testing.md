@@ -13,14 +13,14 @@ Kalphite uses **completion-defining tests** - when all tests pass, the sync engi
 
 ## Test Categories
 
-### Unit Tests (15 passing)
+### Unit Tests
 
 - Store operations and mutations
 - TypedCollection behavior
 - Proxy system functionality
 - Error handling and edge cases
 
-### Acceptance Tests (5 passing)
+### Acceptance Tests
 
 - Complete user workflows
 - React integration patterns
