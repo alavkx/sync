@@ -1,9 +1,22 @@
 {
   "name": "@kalphite/sync-engine",
   "scripts": {
-    "test": "vitest run"
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:status": "vitest run --reporter=basic | grep -E '(Tests|Test Files)'",
+    "test:progress": "vitest run --reporter=verbose | grep -E '(✓|❯|todo|skip)'",
+    "test:perf": "vitest run Layer1-Performance",
+    "test:layer1": "vitest run Layer1",
+    "test:layer2": "vitest run Layer2",
+    "test:layer3": "vitest run Layer3",
+    "test:layer4": "vitest run Layer4",
+    "test:integration": "vitest run Integration",
+    "test:acceptance": "vitest run Acceptance"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.3",
     "zod": "^3.25.56"
   },
   "devDependencies": {
