@@ -1,21 +1,18 @@
-import { KalphiteStore } from "../../src/store/KalphiteStore";
+import { createKalphiteStore } from "../../src/store/KalphiteStore";
+import type { Entity } from "./schema";
 import {
+  createComment,
   createProject,
-  createTag,
   createTodo,
-  createUser,
   EntitySchema,
-  generateId,
-  type Entity,
 } from "./schema";
 
 // =====================================================
 // TODO CLI STORE - Kalphite Integration
 // =====================================================
 
-// Zod schemas are already Standard Schema compliant (v3.24.0+)
-// No adapter needed - pass the schema directly
-export const todoStore = KalphiteStore(EntitySchema, {
+// Create store with schema and config
+export const todoStore = createKalphiteStore(EntitySchema, {
   enableDevtools: true,
   logLevel: "info",
 });
@@ -23,12 +20,12 @@ export const todoStore = KalphiteStore(EntitySchema, {
 // Export typed collections for easy access
 export const todos = todoStore.todo;
 export const projects = todoStore.project;
-export const tags = todoStore.tag;
-export const users = todoStore.user;
 export const comments = todoStore.comment;
 
 // Store reference for global access
-export { todoStore as store };
+export function getStore() {
+  return todoStore;
+}
 
 // =====================================================
 // STORE UTILITIES
@@ -42,8 +39,6 @@ export function getStoreStats() {
   return {
     todos: todoStore.todo.length,
     projects: todoStore.project.length,
-    tags: todoStore.tag.length,
-    users: todoStore.user.length,
     comments: todoStore.comment.length,
     total: todoStore.getAll().length,
   };
@@ -62,68 +57,83 @@ export function importData(entities: Entity[]) {
 // =====================================================
 
 export function loadDemoData() {
-  // Create demo user
-  const user = createUser(generateId(), "Demo User", "demo@example.com");
-  todoStore.user.upsert(user.id, user);
-
   // Create demo project
-  const project = createProject(generateId(), "Getting Started", user.id, {
-    description: "Learn how to use the todo CLI",
-    color: "#3B82F6",
+  const project = createProject("demo-project", "Demo Project", "demo-user", {
+    description: "This is a demo project",
   });
-  todoStore.project.upsert(project.id, project);
+  todoStore.project.push(project);
 
-  // Create demo tags
-  const urgentTag = createTag(generateId(), "urgent", { color: "#EF4444" });
-  const workTag = createTag(generateId(), "work", { color: "#8B5CF6" });
-  const personalTag = createTag(generateId(), "personal", { color: "#10B981" });
+  // Create demo todo
+  const todo = createTodo("demo-todo", "Demo Todo", {
+    description: "This is a demo todo",
+    projectId: project.id,
+    tags: ["demo"],
+  });
+  todoStore.todo.push(todo);
 
-  todoStore.tag.upsert(urgentTag.id, urgentTag);
-  todoStore.tag.upsert(workTag.id, workTag);
-  todoStore.tag.upsert(personalTag.id, personalTag);
-
-  // Create demo todos
-  const todos = [
-    createTodo(generateId(), "Welcome to Todo CLI", {
-      description: "This is your first todo item. Try marking it as complete!",
-      status: "pending",
-      priority: "medium",
-      projectId: project.id,
-      tags: ["personal"],
-    }),
-    createTodo(generateId(), "Read the documentation", {
-      description: "Learn about all the available commands",
-      status: "pending",
-      priority: "high",
-      projectId: project.id,
-      tags: ["work"],
-    }),
-    createTodo(generateId(), "Create your first project", {
-      description: "Projects help organize your todos",
-      status: "pending",
-      priority: "medium",
-      projectId: project.id,
-      tags: ["work"],
-    }),
-    createTodo(generateId(), "Set up persistent storage", {
-      description: "Enable Layer 2 for persistent storage across sessions",
-      status: "pending",
-      priority: "low",
-      projectId: project.id,
-      tags: ["work"],
-    }),
-    createTodo(generateId(), "URGENT: Test performance", {
-      description: "Verify Kalphite can handle 1000+ todos efficiently",
-      status: "in-progress",
-      priority: "urgent",
-      projectId: project.id,
-      tags: ["urgent", "work"],
-      dueDate: Date.now() + 24 * 60 * 60 * 1000, // Due tomorrow
-    }),
-  ];
-
-  todos.forEach((todo) => todoStore.todo.upsert(todo.id, todo));
+  // Create demo comment
+  const comment = createComment(
+    "demo-comment",
+    todo.id,
+    "demo-user",
+    "This is a demo comment"
+  );
+  todoStore.comment.push(comment);
 
   console.log("📝 Demo data loaded successfully!");
-  console.log(`Created ${todos.length} todos, 1 project, 3 tags, and 1 user`);
+  console.log(`Created 1 project, 1 todo, and 1 comment`);
+}
+
+// Helper functions for creating entities
+export function createProject(
+  id: string,
+  name: string,
+  description: string
+): Entity {
+  return {
+    id,
+    type: "project",
+    data: {
+      name,
+      description,
+      status: "active",
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+export function createTask(
+  id: string,
+  projectId: string,
+  title: string,
+  description: string
+): Entity {
+  return {
+    id,
+    type: "task",
+    data: {
+      projectId,
+      title,
+      description,
+      status: "pending",
+      priority: "medium",
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+export function createComment(
+  id: string,
+  taskId: string,
+  message: string
+): Entity {
+  return {
+    id,
+    type: "comment",
+    data: {
+      taskId,
+      message,
+    },
+    updatedAt: Date.now(),
+  };
 }
