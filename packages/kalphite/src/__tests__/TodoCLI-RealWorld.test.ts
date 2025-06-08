@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 
 // Real-world entity types for a Todo CLI application
 interface TodoEntity {
@@ -43,7 +43,7 @@ describe("Real-World Example: Todo CLI Application", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   // Helper functions to create entities (like you'd have in a real app)
@@ -183,7 +183,7 @@ describe("Real-World Example: Todo CLI Application", () => {
     });
 
     it("should sort todos by priority", () => {
-      const store = new KalphiteStore();
+      const store = createKalphiteStore();
       const priorityOrder = {
         high: 3,
         medium: 2,

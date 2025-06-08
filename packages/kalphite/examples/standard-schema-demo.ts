@@ -8,7 +8,7 @@
 // No adapters needed! Just pass the schema directly.
 
 import { z } from "zod";
-import { KalphiteStore } from "../src/store/KalphiteStore";
+import { createKalphiteStore } from "../src/store/KalphiteStore";
 
 // =====================================================
 // ZOD EXAMPLE
@@ -24,7 +24,7 @@ const zodUserSchema = z.object({
 });
 
 // Zod schemas implement Standard Schema natively
-const zodStore = KalphiteStore(zodUserSchema);
+const zodStore = createKalphiteStore(zodUserSchema);
 
 console.log("  Schema vendor:", zodUserSchema["~standard"].vendor);
 console.log("  Schema version:", zodUserSchema["~standard"].version);
@@ -70,7 +70,7 @@ const customUserSchema = {
   },
 };
 
-const customStore = KalphiteStore(customUserSchema);
+const customStore = createKalphiteStore(customUserSchema);
 
 console.log("  Schema vendor:", customUserSchema["~standard"].vendor);
 console.log("  Schema version:", customUserSchema["~standard"].version);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 import { OperationSyncEngine } from "../sync/OperationSyncEngine";
 import type { OperationSyncConfig } from "../types/operation-sync";
 
@@ -120,7 +120,7 @@ describe("Todo CLI: Sync Integration", () => {
   });
 
   beforeEach(() => {
-    store = KalphiteStore(undefined, { syncConfig: config });
+    store = createKalphiteStore(undefined, { syncConfig: config });
     syncEngine = new OperationSyncEngine(config);
     mockHttpClient = new MockHttpClient();
 
@@ -446,7 +446,7 @@ describe("Todo CLI: Sync Integration", () => {
       offlineQueueLimit: 1000,
     };
 
-    const store = new KalphiteStore(undefined, { syncConfig: config });
+    const store = createKalphiteStore(undefined, { syncConfig: config });
     expect(store).toBeDefined();
   });
 });

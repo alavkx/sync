@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Layer 1: Performance & Scalability", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   describe("Bulk Loading Performance", () => {
@@ -335,7 +335,7 @@ describe("Layer 1: Performance & Scalability", () => {
   });
 
   it("should handle large collections efficiently", () => {
-    const store = new KalphiteStore();
+    const store = createKalphiteStore();
     const filtered = store.comment.filter(() => true);
     expect(filtered).toBeDefined();
   });

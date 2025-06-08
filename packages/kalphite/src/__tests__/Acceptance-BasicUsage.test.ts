@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Acceptance: Basic Usage (Local-Only)", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   test("complete user workflow: create, read, update, collaborate", () => {

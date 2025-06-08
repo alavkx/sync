@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 import type { Entity } from "../types/entity";
 import { createCommentEntity } from "./setup";
 
@@ -7,7 +7,7 @@ describe("Integration: Advanced Patterns", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   describe("Error Handling & Recovery", () => {
