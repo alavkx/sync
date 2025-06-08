@@ -396,32 +396,34 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
     this.suppressNotifications = true;
 
     try {
-      // Group entities by type to minimize array operations
-      const entitiesByType = new Map<string, any[]>();
-
-      // Batch entity map updates
+      // Add entities to the authoritative entities map (deduplicates by ID)
       entities.forEach((entity) => {
         this.entities.set((entity as any).id, entity);
+      });
 
+      // Rebuild all affected type arrays from the entities map to ensure consistency
+      const affectedTypes = new Set<string>();
+      entities.forEach((entity) => {
         const entityType = (entity as any).type;
         if (entityType) {
-          if (!entitiesByType.has(entityType)) {
-            entitiesByType.set(entityType, []);
-          }
-          entitiesByType.get(entityType)!.push(entity);
+          affectedTypes.add(entityType);
         }
       });
 
-      // Update type arrays in bulk - more efficient approach
-      entitiesByType.forEach((typeEntities, entityType) => {
+      // Refresh only the affected type arrays
+      affectedTypes.forEach((entityType) => {
         const typeArray = this.getTypeArray(entityType);
 
-        // Create proxies in batch
-        const proxiedEntities = typeEntities.map((entity) =>
-          this.createEntityProxy(entity)
+        // Get all entities of this type from the authoritative map
+        const currentEntities = Array.from(this.entities.values()).filter(
+          (entity) => entity && (entity as any).type === entityType
         );
 
-        // For bulk loading, append new entities (additive behavior)
+        // Clear and rebuild the array
+        typeArray.length = 0;
+        const proxiedEntities = currentEntities.map((entity) =>
+          this.createEntityProxy(entity)
+        );
         typeArray.push(...proxiedEntities);
       });
     } finally {
