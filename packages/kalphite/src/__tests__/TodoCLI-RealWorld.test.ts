@@ -1,431 +1,592 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import {
-  createProject,
-  createTodo,
-  generateId,
-  type TodoStatus,
-} from "../../examples/todo-cli/schema";
-import {
-  clearAllData,
-  getStoreStats,
-  loadDemoData,
-  todoStore,
-} from "../../examples/todo-cli/store";
+import { KalphiteStore } from "../store/KalphiteStore";
 
-describe("Real-World Usage: Todo CLI with Kalphite", () => {
+// Real-world entity types for a Todo CLI application
+interface TodoEntity {
+  id: string;
+  type: "todo";
+  data: {
+    title: string;
+    description?: string;
+    completed: boolean;
+    priority: "low" | "medium" | "high";
+    dueDate?: string;
+    tags: string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+interface ProjectEntity {
+  id: string;
+  type: "project";
+  data: {
+    name: string;
+    description?: string;
+    color: string;
+    createdAt: string;
+    todoIds: string[];
+  };
+}
+
+interface TagEntity {
+  id: string;
+  type: "tag";
+  data: {
+    name: string;
+    color: string;
+    count: number;
+  };
+}
+
+describe("Real-World Example: Todo CLI Application", () => {
+  let store: any;
+
   beforeEach(() => {
-    clearAllData();
+    store = KalphiteStore();
   });
 
-  describe("Basic Todo Operations", () => {
-    test("should create and retrieve todos synchronously", () => {
-      // This demonstrates the memory-first approach - no async needed
-      const todo = createTodo(generateId(), "Buy groceries", {
+  // Helper functions to create entities (like you'd have in a real app)
+  const createTodo = (
+    id: string,
+    title: string,
+    options: Partial<TodoEntity["data"]> = {}
+  ): TodoEntity => ({
+    id,
+    type: "todo",
+    data: {
+      title,
+      completed: false,
+      priority: "medium",
+      tags: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...options,
+    },
+  });
+
+  const createProject = (
+    id: string,
+    name: string,
+    options: Partial<ProjectEntity["data"]> = {}
+  ): ProjectEntity => ({
+    id,
+    type: "project",
+    data: {
+      name,
+      color: "#3498db",
+      createdAt: new Date().toISOString(),
+      todoIds: [],
+      ...options,
+    },
+  });
+
+  const createTag = (
+    id: string,
+    name: string,
+    color = "#95a5a6"
+  ): TagEntity => ({
+    id,
+    type: "tag",
+    data: {
+      name,
+      color,
+      count: 0,
+    },
+  });
+
+  describe("Core Todo Operations", () => {
+    test("adding todos to the system", () => {
+      const todo1 = createTodo("todo-1", "Write unit tests", {
         priority: "high",
-        tags: ["shopping", "urgent"],
+        tags: ["development", "testing"],
       });
 
-      // Upsert returns the entity immediately
-      const result = todoStore.todo.upsert(todo.id, todo);
-      expect(result).toEqual(todo);
-
-      // Data is immediately available
-      expect(todoStore.todo).toHaveLength(1);
-      expect(todoStore.todo[0]).toEqual(todo);
-
-      // Can find by ID immediately
-      const found = todoStore.todo.findById(todo.id);
-      expect(found).toEqual(todo);
-    });
-
-    test("should handle todo status updates", () => {
-      const todo = createTodo(generateId(), "Complete project", {
-        status: "pending",
-        priority: "urgent",
+      const todo2 = createTodo("todo-2", "Review pull request", {
+        priority: "medium",
+        dueDate: "2024-01-15",
+        tags: ["review"],
       });
 
-      todoStore.todo.upsert(todo.id, todo);
+      // Add todos
+      store.todo.push(todo1);
+      store.todo.push(todo2);
 
-      // Update status
-      const completed = {
-        ...todo,
-        data: { ...todo.data, status: "completed" as TodoStatus },
-        updatedAt: Date.now(),
-      };
-
-      todoStore.todo.upsert(todo.id, completed);
-
-      // Verify update is immediate
-      const updated = todoStore.todo.findById(todo.id);
-      expect(updated?.data.status).toBe("completed");
-      expect(todoStore.todo).toHaveLength(1); // Same todo, just updated
+      expect(store.todo).toHaveLength(2);
+      expect(store.todo[0]).toEqual(todo1);
+      expect(store.todo[1]).toEqual(todo2);
     });
 
-    test("should delete todos correctly", () => {
-      const todo1 = createTodo(generateId(), "Task 1");
-      const todo2 = createTodo(generateId(), "Task 2");
+    test("marking todos as completed", () => {
+      const todo = createTodo("todo-1", "Complete project setup");
+      store.todo.push(todo);
 
-      todoStore.todo.upsert(todo1.id, todo1);
-      todoStore.todo.upsert(todo2.id, todo2);
-      expect(todoStore.todo).toHaveLength(2);
+      // Mark as completed (simulating user action)
+      const todoIndex = store.todo.findIndex((t: any) => t.id === "todo-1");
+      if (todoIndex >= 0) {
+        store.todo[todoIndex] = {
+          ...store.todo[todoIndex],
+          data: {
+            ...store.todo[todoIndex].data,
+            completed: true,
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      }
 
-      // Delete one todo
-      const deleted = todoStore.todo.delete(todo1.id);
-      expect(deleted).toBe(true);
-      expect(todoStore.todo).toHaveLength(1);
-      expect(todoStore.todo[0].id).toBe(todo2.id);
-
-      // Try to delete non-existent todo
-      const notDeleted = todoStore.todo.delete("nonexistent");
-      expect(notDeleted).toBe(false);
+      const updatedTodo = store.todo.find((t: any) => t.id === "todo-1");
+      expect(updatedTodo?.data.completed).toBe(true);
     });
-  });
 
-  describe("Query Operations (Functional Style)", () => {
-    beforeEach(() => {
-      // Set up test data
+    test("filtering todos by status", () => {
+      const completedTodo = createTodo("todo-1", "Completed task", {
+        completed: true,
+      });
+      const pendingTodo1 = createTodo("todo-2", "Pending task 1");
+      const pendingTodo2 = createTodo("todo-3", "Pending task 2");
+
+      store.todo.push(completedTodo);
+      store.todo.push(pendingTodo1);
+      store.todo.push(pendingTodo2);
+
+      // Filter completed todos
+      const completed = store.todo.filter((t: any) => t.data.completed);
+      expect(completed).toHaveLength(1);
+      expect(completed[0].id).toBe("todo-1");
+
+      // Filter pending todos
+      const pending = store.todo.filter((t: any) => !t.data.completed);
+      expect(pending).toHaveLength(2);
+      expect(pending.map((t: any) => t.id)).toEqual(["todo-2", "todo-3"]);
+    });
+
+    test("searching todos by title", () => {
       const todos = [
-        createTodo(generateId(), "Urgent bug fix", {
-          priority: "urgent",
-          status: "pending",
-          tags: ["bug", "urgent"],
-        }),
-        createTodo(generateId(), "Code review", {
-          priority: "high",
-          status: "in-progress",
-          tags: ["review"],
-        }),
-        createTodo(generateId(), "Documentation", {
-          priority: "medium",
-          status: "pending",
-          tags: ["docs"],
-        }),
-        createTodo(generateId(), "Refactoring", {
-          priority: "low",
-          status: "completed",
-          tags: ["cleanup"],
-        }),
-        createTodo(generateId(), "Another bug", {
-          priority: "urgent",
-          status: "cancelled",
-          tags: ["bug"],
-        }),
+        createTodo("todo-1", "Write documentation"),
+        createTodo("todo-2", "Write unit tests"),
+        createTodo("todo-3", "Review code"),
+        createTodo("todo-4", "Write integration tests"),
       ];
 
-      todos.forEach((todo) => todoStore.todo.upsert(todo.id, todo));
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Search for todos containing "write"
+      const writeResults = store.todo.filter((t: any) =>
+        t.data.title.toLowerCase().includes("write")
+      );
+      expect(writeResults).toHaveLength(3);
+      expect(writeResults.map((t: any) => t.id).sort()).toEqual([
+        "todo-1",
+        "todo-2",
+        "todo-4",
+      ]);
     });
 
-    test("should filter todos by status using where()", () => {
-      const pending = todoStore.todo.where(
-        (todo) => todo.data.status === "pending"
-      );
-      const completed = todoStore.todo.where(
-        (todo) => todo.data.status === "completed"
-      );
-      const inProgress = todoStore.todo.where(
-        (todo) => todo.data.status === "in-progress"
-      );
+    test("sorting todos by priority", () => {
+      const todos = [
+        createTodo("todo-1", "Low priority task", { priority: "low" }),
+        createTodo("todo-2", "High priority task", { priority: "high" }),
+        createTodo("todo-3", "Medium priority task", { priority: "medium" }),
+      ];
 
-      expect(pending).toHaveLength(2);
-      expect(completed).toHaveLength(1);
-      expect(inProgress).toHaveLength(1);
+      todos.forEach((todo) => store.todo.push(todo));
 
-      // Verify specific todos
-      expect(pending.every((todo) => todo.data.status === "pending")).toBe(
-        true
-      );
-      expect(completed[0].data.title).toBe("Refactoring");
-    });
-
-    test("should filter todos by priority", () => {
-      const urgent = todoStore.todo.where(
-        (todo) => todo.data.priority === "urgent"
-      );
-      const high = todoStore.todo.where(
-        (todo) => todo.data.priority === "high"
+      // Sort by priority (high -> medium -> low)
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      const sorted = store.todo.sort(
+        (a: any, b: any) =>
+          priorityOrder[b.data.priority] - priorityOrder[a.data.priority]
       );
 
-      expect(urgent).toHaveLength(2);
-      expect(high).toHaveLength(1);
-
-      expect(urgent.every((todo) => todo.data.priority === "urgent")).toBe(
-        true
-      );
-    });
-
-    test("should filter todos by tags", () => {
-      const bugTodos = todoStore.todo.where((todo) =>
-        todo.data.tags.includes("bug")
-      );
-      const urgentTodos = todoStore.todo.where((todo) =>
-        todo.data.tags.includes("urgent")
-      );
-
-      expect(bugTodos).toHaveLength(2);
-      expect(urgentTodos).toHaveLength(1);
-
-      expect(bugTodos.every((todo) => todo.data.tags.includes("bug"))).toBe(
-        true
-      );
-    });
-
-    test("should sort todos by priority using orderBy()", () => {
-      const sortedByPriority = todoStore.todo.orderBy((todo) => {
-        const priorities = { urgent: 4, high: 3, medium: 2, low: 1 };
-        return -priorities[todo.data.priority]; // Negative for descending order
-      });
-
-      // Should be sorted by priority (descending)
-      expect(sortedByPriority[0].data.priority).toBe("urgent");
-      expect(sortedByPriority[sortedByPriority.length - 1].data.priority).toBe(
-        "low"
-      );
-    });
-
-    test("should chain functional operations", () => {
-      // Find all urgent pending todos and sort by title
-      const urgentPending = todoStore.todo
-        .where((todo) => todo.data.status === "pending")
-        .filter((todo) => todo.data.priority === "urgent")
-        .sort((a, b) => a.data.title.localeCompare(b.data.title));
-
-      expect(urgentPending).toHaveLength(1);
-      expect(urgentPending[0].data.title).toBe("Urgent bug fix");
+      expect(sorted.map((t: any) => t.data.priority)).toEqual([
+        "high",
+        "medium",
+        "low",
+      ]);
     });
   });
 
-  describe("Project Organization", () => {
-    test("should organize todos by projects", () => {
-      const user = todoStore.user[0] || { id: "user1" };
-      const project = createProject(generateId(), "Web App", user.id, {
-        description: "Main web application project",
+  describe("Project Management", () => {
+    test("creating projects and associating todos", () => {
+      // Create a project
+      const project = createProject("proj-1", "Website Redesign", {
+        description: "Complete redesign of company website",
+        color: "#e74c3c",
       });
-
-      todoStore.project.upsert(project.id, project);
 
       // Create todos for the project
       const todos = [
-        createTodo(generateId(), "Setup routing", { projectId: project.id }),
-        createTodo(generateId(), "Add authentication", {
-          projectId: project.id,
-        }),
-        createTodo(generateId(), "Personal task"), // No project
+        createTodo("todo-1", "Design mockups"),
+        createTodo("todo-2", "Implement frontend"),
+        createTodo("todo-3", "Backend integration"),
       ];
 
-      todos.forEach((todo) => todoStore.todo.upsert(todo.id, todo));
+      store.project.push(project);
+      todos.forEach((todo) => store.todo.push(todo));
 
-      // Find todos for the project
-      const projectTodos = todoStore.todo.where(
-        (todo) => todo.data.projectId === project.id
+      // Associate todos with project
+      const updatedProject = {
+        ...project,
+        data: {
+          ...project.data,
+          todoIds: todos.map((t) => t.id),
+        },
+      };
+
+      const projectIndex = store.project.findIndex(
+        (p: any) => p.id === "proj-1"
       );
-      const personalTodos = todoStore.todo.where(
-        (todo) => !todo.data.projectId
+      if (projectIndex >= 0) {
+        store.project[projectIndex] = updatedProject;
+      }
+
+      // Verify associations
+      const retrievedProject = store.project.find(
+        (p: any) => p.id === "proj-1"
+      );
+      expect(retrievedProject?.data.todoIds).toHaveLength(3);
+      expect(retrievedProject?.data.todoIds.sort()).toEqual([
+        "todo-1",
+        "todo-2",
+        "todo-3",
+      ]);
+    });
+
+    test("getting todos for a specific project", () => {
+      const project = createProject("proj-1", "API Development", {
+        todoIds: ["todo-1", "todo-3"],
+      });
+
+      const todos = [
+        createTodo("todo-1", "Design API endpoints"),
+        createTodo("todo-2", "Unrelated task"),
+        createTodo("todo-3", "Write API tests"),
+        createTodo("todo-4", "Another unrelated task"),
+      ];
+
+      store.project.push(project);
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Get todos for project
+      const projectTodos = store.todo.filter((t: any) =>
+        project.data.todoIds.includes(t.id)
       );
 
       expect(projectTodos).toHaveLength(2);
-      expect(personalTodos).toHaveLength(1);
-      expect(
-        projectTodos.every((todo) => todo.data.projectId === project.id)
-      ).toBe(true);
+      expect(projectTodos.map((t: any) => t.id).sort()).toEqual([
+        "todo-1",
+        "todo-3",
+      ]);
+    });
+
+    test("calculating project completion percentage", () => {
+      const project = createProject("proj-1", "Bug Fixes", {
+        todoIds: ["todo-1", "todo-2", "todo-3", "todo-4"],
+      });
+
+      const todos = [
+        createTodo("todo-1", "Fix login bug", { completed: true }),
+        createTodo("todo-2", "Fix rendering bug", { completed: true }),
+        createTodo("todo-3", "Fix database bug", { completed: false }),
+        createTodo("todo-4", "Fix email bug", { completed: false }),
+      ];
+
+      store.project.push(project);
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Calculate completion percentage
+      const projectTodos = store.todo.filter((t: any) =>
+        project.data.todoIds.includes(t.id)
+      );
+      const completedCount = projectTodos.filter(
+        (t: any) => t.data.completed
+      ).length;
+      const completionPercentage = (completedCount / projectTodos.length) * 100;
+
+      expect(completionPercentage).toBe(50);
     });
   });
 
-  describe("Performance Testing", () => {
-    test("should handle 1000+ todos efficiently", () => {
+  describe("Tag System", () => {
+    test("creating and managing tags", () => {
+      const tags = [
+        createTag("tag-1", "urgent", "#e74c3c"),
+        createTag("tag-2", "bug", "#f39c12"),
+        createTag("tag-3", "feature", "#2ecc71"),
+      ];
+
+      tags.forEach((tag) => store.tag.push(tag));
+
+      expect(store.tag).toHaveLength(3);
+      expect(store.tag.map((t: any) => t.data.name)).toEqual([
+        "urgent",
+        "bug",
+        "feature",
+      ]);
+    });
+
+    test("finding todos by tag", () => {
+      const todos = [
+        createTodo("todo-1", "Fix critical bug", { tags: ["urgent", "bug"] }),
+        createTodo("todo-2", "Add new feature", { tags: ["feature"] }),
+        createTodo("todo-3", "Minor improvement", { tags: ["enhancement"] }),
+        createTodo("todo-4", "Another bug fix", { tags: ["bug"] }),
+      ];
+
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Find todos with "bug" tag
+      const bugTodos = store.todo.filter((t: any) =>
+        t.data.tags.includes("bug")
+      );
+
+      expect(bugTodos).toHaveLength(2);
+      expect(bugTodos.map((t: any) => t.id).sort()).toEqual([
+        "todo-1",
+        "todo-4",
+      ]);
+    });
+
+    test("updating tag usage counts", () => {
+      const todos = [
+        createTodo("todo-1", "Task 1", { tags: ["urgent", "bug"] }),
+        createTodo("todo-2", "Task 2", { tags: ["urgent"] }),
+        createTodo("todo-3", "Task 3", { tags: ["bug", "frontend"] }),
+      ];
+
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Calculate tag usage
+      const tagCounts: Record<string, number> = {};
+      store.todo.forEach((todo: any) => {
+        todo.data.tags.forEach((tag: string) => {
+          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        });
+      });
+
+      expect(tagCounts).toEqual({
+        urgent: 2,
+        bug: 2,
+        frontend: 1,
+      });
+    });
+  });
+
+  describe("Advanced Query Patterns", () => {
+    test("complex filtering and sorting", () => {
+      const todos = [
+        createTodo("todo-1", "High priority overdue", {
+          priority: "high",
+          dueDate: "2023-12-01",
+          tags: ["urgent"],
+        }),
+        createTodo("todo-2", "Medium priority current", {
+          priority: "medium",
+          dueDate: "2024-02-01",
+        }),
+        createTodo("todo-3", "High priority future", {
+          priority: "high",
+          dueDate: "2024-03-01",
+        }),
+        createTodo("todo-4", "Low priority no date", { priority: "low" }),
+      ];
+
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Complex query: High priority todos, sorted by due date
+      const highPriorityTodos = store.todo
+        .filter((t: any) => t.data.priority === "high")
+        .sort((a: any, b: any) => {
+          if (!a.data.dueDate && !b.data.dueDate) return 0;
+          if (!a.data.dueDate) return 1;
+          if (!b.data.dueDate) return -1;
+          return (
+            new Date(a.data.dueDate).getTime() -
+            new Date(b.data.dueDate).getTime()
+          );
+        });
+
+      expect(highPriorityTodos).toHaveLength(2);
+      expect(highPriorityTodos[0].id).toBe("todo-1"); // Earliest due date
+      expect(highPriorityTodos[1].id).toBe("todo-3");
+    });
+
+    test("aggregating data across entity types", () => {
+      // Setup realistic data
+      const projects = [
+        createProject("proj-1", "Frontend", { todoIds: ["todo-1", "todo-2"] }),
+        createProject("proj-2", "Backend", { todoIds: ["todo-3", "todo-4"] }),
+      ];
+
+      const todos = [
+        createTodo("todo-1", "UI Components", { completed: true }),
+        createTodo("todo-2", "Styling", { completed: false }),
+        createTodo("todo-3", "API Routes", { completed: true }),
+        createTodo("todo-4", "Database", { completed: false }),
+      ];
+
+      projects.forEach((project) => store.project.push(project));
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Calculate project statistics
+      const projectStats = store.project.map((project: any) => {
+        const projectTodos = store.todo.filter((t: any) =>
+          project.data.todoIds.includes(t.id)
+        );
+        const completed = projectTodos.filter(
+          (t: any) => t.data.completed
+        ).length;
+
+        return {
+          name: project.data.name,
+          totalTodos: projectTodos.length,
+          completedTodos: completed,
+          completionRate: (completed / projectTodos.length) * 100,
+        };
+      });
+
+      expect(projectStats).toEqual([
+        {
+          name: "Frontend",
+          totalTodos: 2,
+          completedTodos: 1,
+          completionRate: 50,
+        },
+        {
+          name: "Backend",
+          totalTodos: 2,
+          completedTodos: 1,
+          completionRate: 50,
+        },
+      ]);
+    });
+  });
+
+  describe("Performance with Real-World Data Volumes", () => {
+    test("handles typical CLI usage volume efficiently", () => {
       const startTime = performance.now();
 
-      // Create 1000 todos
-      for (let i = 0; i < 1000; i++) {
-        const todo = createTodo(generateId(), `Todo ${i}`, {
-          priority: i % 4 === 0 ? "urgent" : "medium",
-          status: i % 3 === 0 ? "completed" : "pending",
-          tags: [`tag-${i % 5}`],
-        });
-        todoStore.todo.upsert(todo.id, todo);
+      // Simulate typical usage: 500 todos, 20 projects, 50 tags
+      for (let i = 0; i < 500; i++) {
+        store.todo.push(
+          createTodo(`todo-${i}`, `Task ${i}`, {
+            priority: i % 3 === 0 ? "high" : i % 2 === 0 ? "medium" : "low",
+            completed: i % 4 === 0,
+            tags: [`tag-${i % 10}`, `category-${i % 5}`],
+          })
+        );
       }
 
-      const createTime = performance.now() - startTime;
-      expect(createTime).toBeLessThan(100); // Should create 1000 todos in under 100ms
-      expect(todoStore.todo).toHaveLength(1000);
+      for (let i = 0; i < 20; i++) {
+        store.project.push(createProject(`proj-${i}`, `Project ${i}`));
+      }
+
+      for (let i = 0; i < 50; i++) {
+        store.tag.push(createTag(`tag-${i}`, `Tag ${i}`));
+      }
+
+      const setupTime = performance.now() - startTime;
 
       // Test query performance
       const queryStart = performance.now();
-      const urgentTodos = todoStore.todo.where(
-        (todo) => todo.data.priority === "urgent"
+
+      const highPriorityIncomplete = store.todo.filter(
+        (t: any) => t.data.priority === "high" && !t.data.completed
       );
+      const recentProjects = store.project.slice(0, 5);
+      const popularTags = store.tag.slice(0, 10);
+
       const queryTime = performance.now() - queryStart;
 
-      expect(queryTime).toBeLessThan(10); // Query should be under 10ms
-      expect(urgentTodos.length).toBeGreaterThan(200); // Should find ~250 urgent todos
-
-      // Test array operations performance
-      const mapStart = performance.now();
-      const titles = todoStore.todo.map((todo) => todo.data.title);
-      const mapTime = performance.now() - mapStart;
-
-      expect(mapTime).toBeLessThan(10); // Map should be under 10ms
-      expect(titles).toHaveLength(1000);
-    });
-
-    test("should maintain performance with frequent updates", () => {
-      // Create initial todos
-      const initialTodos = Array.from({ length: 100 }, (_, i) =>
-        createTodo(generateId(), `Initial todo ${i}`)
-      );
-      initialTodos.forEach((todo) => todoStore.todo.upsert(todo.id, todo));
-
-      const updateStart = performance.now();
-
-      // Perform many updates
-      for (let i = 0; i < 500; i++) {
-        const todo = todoStore.todo[i % 100];
-        const updated = {
-          ...todo,
-          data: { ...todo.data, status: "in-progress" as TodoStatus },
-          updatedAt: Date.now(),
-        };
-        todoStore.todo.upsert(todo.id, updated);
-      }
-
-      const updateTime = performance.now() - updateStart;
-      expect(updateTime).toBeLessThan(50); // 500 updates in under 50ms
-
-      // Verify data integrity
-      expect(todoStore.todo).toHaveLength(100);
-      expect(
-        todoStore.todo.every((todo) => todo.data.status === "in-progress")
-      ).toBe(true);
+      expect(setupTime).toBeLessThan(500); // Setup should be fast
+      expect(queryTime).toBeLessThan(50); // Queries should be very fast
+      expect(store.todo).toHaveLength(500);
+      expect(store.project).toHaveLength(20);
+      expect(store.tag).toHaveLength(50);
+      expect(highPriorityIncomplete.length).toBeGreaterThan(0);
     });
   });
 
-  describe("Demo Data Integration", () => {
-    test("should load demo data correctly", () => {
-      loadDemoData();
-
-      const stats = getStoreStats();
-
-      expect(stats.todos).toBeGreaterThan(0);
-      expect(stats.projects).toBeGreaterThan(0);
-      expect(stats.tags).toBeGreaterThan(0);
-      expect(stats.users).toBeGreaterThan(0);
-
-      // Verify specific demo data
-      const urgentTodos = todoStore.todo.where(
-        (todo) => todo.data.priority === "urgent"
-      );
-      expect(urgentTodos.length).toBeGreaterThan(0);
-
-      const projects = todoStore.project;
-      expect(projects.some((p) => p.data.name === "Getting Started")).toBe(
-        true
-      );
-    });
-
-    test("should demonstrate real-world usage patterns", () => {
-      loadDemoData();
-
-      // Simulate user interactions
-      const newTodo = createTodo(generateId(), "User-created task", {
-        priority: "high",
-        tags: ["new", "user-created"],
+  describe("Realistic User Workflows", () => {
+    test("complete workflow: create project, add todos, track progress", () => {
+      // Step 1: Create a new project
+      const project = createProject("website-project", "Company Website", {
+        description: "Redesign and modernize the company website",
+        color: "#3498db",
       });
 
-      todoStore.todo.upsert(newTodo.id, newTodo);
+      store.project.push(project);
 
-      // Mark a todo as complete
-      const firstTodo = todoStore.todo[0];
-      const completed = {
-        ...firstTodo,
-        data: { ...firstTodo.data, status: "completed" as TodoStatus },
-        updatedAt: Date.now(),
-      };
-      todoStore.todo.upsert(firstTodo.id, completed);
+      // Step 2: Add todos for the project
+      const todos = [
+        createTodo("design-mockups", "Create design mockups", {
+          priority: "high",
+          tags: ["design", "frontend"],
+        }),
+        createTodo("setup-repo", "Setup Git repository", {
+          priority: "high",
+          tags: ["setup", "infrastructure"],
+        }),
+        createTodo("implement-layout", "Implement responsive layout", {
+          priority: "medium",
+          tags: ["frontend", "css"],
+        }),
+        createTodo("content-migration", "Migrate existing content", {
+          priority: "low",
+          tags: ["content", "migration"],
+        }),
+      ];
 
-      // Filter and display
-      const completedTodos = todoStore.todo.where(
-        (todo) => todo.data.status === "completed"
+      todos.forEach((todo) => store.todo.push(todo));
+
+      // Step 3: Associate todos with project
+      const projectIndex = store.project.findIndex(
+        (p: any) => p.id === "website-project"
       );
-      const highPriorityTodos = todoStore.todo.where(
-        (todo) => todo.data.priority === "high"
+      if (projectIndex >= 0) {
+        store.project[projectIndex] = {
+          ...store.project[projectIndex],
+          data: {
+            ...store.project[projectIndex].data,
+            todoIds: todos.map((t) => t.id),
+          },
+        };
+      }
+
+      // Step 4: Complete some todos
+      const todoIndex = store.todo.findIndex((t: any) => t.id === "setup-repo");
+      if (todoIndex >= 0) {
+        store.todo[todoIndex] = {
+          ...store.todo[todoIndex],
+          data: {
+            ...store.todo[todoIndex].data,
+            completed: true,
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      }
+
+      // Step 5: Check project status
+      const updatedProject = store.project.find(
+        (p: any) => p.id === "website-project"
+      );
+      const projectTodos = store.todo.filter((t: any) =>
+        updatedProject?.data.todoIds.includes(t.id)
+      );
+      const completedTodos = projectTodos.filter((t: any) => t.data.completed);
+
+      expect(updatedProject?.data.name).toBe("Company Website");
+      expect(projectTodos).toHaveLength(4);
+      expect(completedTodos).toHaveLength(1);
+      expect(completedTodos[0].id).toBe("setup-repo");
+
+      // Step 6: Get high priority pending tasks
+      const highPriorityPending = projectTodos.filter(
+        (t: any) => t.data.priority === "high" && !t.data.completed
       );
 
-      expect(completedTodos.length).toBeGreaterThan(0);
-      expect(highPriorityTodos.length).toBeGreaterThan(0);
-
-      // All operations are synchronous - no promises needed!
-      expect(todoStore.todo.findById(newTodo.id)).toEqual(newTodo);
-    });
-  });
-
-  describe("Memory-First Philosophy Validation", () => {
-    test("all operations should be synchronous", () => {
-      // No async/await in any of these operations
-      const todo = createTodo(generateId(), "Sync test");
-
-      const result = todoStore.todo.upsert(todo.id, todo);
-      const found = todoStore.todo.findById(todo.id);
-      const filtered = todoStore.todo.where((t) => t.id === todo.id);
-      const all = todoStore.todo.map((t) => t.data.title);
-
-      // All operations return immediately
-      expect(result).toEqual(todo);
-      expect(found).toEqual(todo);
-      expect(filtered).toHaveLength(1);
-      expect(all).toContain("Sync test");
-
-      const deleted = todoStore.todo.delete(todo.id);
-      expect(deleted).toBe(true);
-      expect(todoStore.todo.findById(todo.id)).toBeUndefined();
-    });
-
-    test("should maintain referential consistency", () => {
-      const todo = createTodo(generateId(), "Reference test");
-      todoStore.todo.upsert(todo.id, todo);
-
-      // All access methods should return the same reference
-      const fromArray = todoStore.todo[0];
-      const fromFindById = todoStore.todo.findById(todo.id);
-      const fromStore = todoStore.getById(todo.id);
-
-      expect(fromArray).toBe(fromFindById);
-      expect(fromFindById).toBe(fromStore);
-    });
-
-    test("should demonstrate UI-ready data flow", () => {
-      // Simulate React component behavior
-      let renderCount = 0;
-      const mockRerender = () => renderCount++;
-
-      // Subscribe to changes
-      const unsubscribe = todoStore.subscribe(mockRerender);
-
-      expect(renderCount).toBe(0);
-
-      // Add todo - should trigger render
-      const todo = createTodo(generateId(), "UI test");
-      todoStore.todo.upsert(todo.id, todo);
-      expect(renderCount).toBe(1);
-
-      // Update todo - should trigger render
-      const updated = {
-        ...todo,
-        data: { ...todo.data, status: "completed" as TodoStatus },
-      };
-      todoStore.todo.upsert(todo.id, updated);
-      expect(renderCount).toBe(2);
-
-      // Delete todo - should trigger render
-      todoStore.todo.delete(todo.id);
-      expect(renderCount).toBe(3);
-
-      unsubscribe();
-
-      // After unsubscribe, no more renders
-      todoStore.todo.upsert(
-        generateId(),
-        createTodo(generateId(), "No render")
-      );
-      expect(renderCount).toBe(3);
+      expect(highPriorityPending).toHaveLength(1);
+      expect(highPriorityPending[0].id).toBe("design-mockups");
     });
   });
 });

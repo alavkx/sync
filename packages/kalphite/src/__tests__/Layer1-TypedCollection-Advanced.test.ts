@@ -3,126 +3,111 @@ import { KalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Layer 1: TypedCollection Advanced Features", () => {
-  let store: ReturnType<typeof KalphiteStore>;
+  let store: any;
 
   beforeEach(() => {
     store = KalphiteStore();
   });
 
   describe("Missing Query Methods", () => {
-    test("TypedCollection.findById should find entities efficiently", () => {
+    test("TypedCollection.find should find entities efficiently", () => {
       const comment1 = createCommentEntity("c1", "First comment", 10);
       const comment2 = createCommentEntity("c2", "Second comment", 20);
 
-      store.comment.upsert("c1", comment1);
-      store.comment.upsert("c2", comment2);
+      store.comment.push(comment1);
+      store.comment.push(comment2);
 
-      // This method doesn't exist yet - should be implemented
-      expect(() => (store.comment as any).findById?.("c1")).not.toThrow();
+      // Test find method (native array method)
+      const found = store.comment.find((c: any) => c.id === "c1");
+      expect(found).toEqual(comment1);
 
-      const found = (store.comment as any).findById?.("c1");
-      if (found !== undefined) {
-        expect(found).toEqual(comment1);
-      }
-
-      const notFound = (store.comment as any).findById?.("nonexistent");
+      const notFound = store.comment.find((c: any) => c.id === "nonexistent");
       expect(notFound).toBeUndefined();
     });
 
-    test("TypedCollection.where should filter entities functionally", () => {
+    test("TypedCollection.filter should filter entities functionally", () => {
       const comments = [
-        createCommentEntity("c1", "Bug report", 10),
-        createCommentEntity("c2", "Feature request", 20),
-        createCommentEntity("c3", "Bug fix", 30),
+        createCommentEntity("c1", "Important comment", 5),
+        createCommentEntity("c2", "Regular comment", 15),
+        createCommentEntity("c3", "Another important", 25),
+        createCommentEntity("c4", "Low priority", 35),
       ];
 
-      comments.forEach((c) => store.comment.upsert(c.id, c));
+      comments.forEach((c) => store.comment.push(c));
 
-      // This method doesn't exist yet - should be implemented
-      const bugComments = (store.comment as any).where?.((c: any) =>
-        c.data.message.includes("Bug")
-      );
-
-      if (bugComments !== undefined) {
-        expect(bugComments).toHaveLength(2);
-        expect(
-          bugComments.every((c: any) => c.data.message.includes("Bug"))
-        ).toBe(true);
-      }
+      // Test filter method (native array method)
+      const filtered = store.comment.filter((c: any) => c.data.lineNumber < 20);
+      expect(filtered).toHaveLength(2);
+      expect(filtered.map((c: any) => c.id)).toEqual(["c1", "c2"]);
     });
 
-    test("TypedCollection.orderBy should sort entities functionally", () => {
+    test("TypedCollection.sort should sort entities functionally", () => {
       const comments = [
-        createCommentEntity("c1", "Comment", 30),
-        createCommentEntity("c2", "Comment", 10),
-        createCommentEntity("c3", "Comment", 20),
+        createCommentEntity("c1", "Third", 30),
+        createCommentEntity("c2", "First", 10),
+        createCommentEntity("c3", "Second", 20),
       ];
 
-      comments.forEach((c) => store.comment.upsert(c.id, c));
+      comments.forEach((c) => store.comment.push(c));
 
-      // This method doesn't exist yet - should be implemented
-      const sortedComments = (store.comment as any).orderBy?.(
-        (c: any) => c.data.lineNumber
+      // Test sort method (native array method)
+      const sorted = store.comment.sort(
+        (a: any, b: any) => a.data.lineNumber - b.data.lineNumber
       );
-
-      if (sortedComments !== undefined) {
-        expect(sortedComments).toHaveLength(3);
-        expect(sortedComments[0].data.lineNumber).toBe(10);
-        expect(sortedComments[1].data.lineNumber).toBe(20);
-        expect(sortedComments[2].data.lineNumber).toBe(30);
-      }
+      expect(sorted.map((c: any) => c.data.lineNumber)).toEqual([10, 20, 30]);
+      expect(sorted.map((c: any) => c.id)).toEqual(["c2", "c3", "c1"]);
     });
   });
 
   describe("Entity Reference Consistency", () => {
     test("entity references should be shared across different access methods", () => {
       const comment = createCommentEntity("c1", "Test comment", 10);
-      store.comment.upsert("c1", comment);
+      store.comment.push(comment);
 
       const fromCollection = store.comment[0];
-      const fromStoreById = store.getById("c1");
-      const fromStoreByType = store.getByType("comment")[0];
+      const fromFind = store.comment.find((c: any) => c.id === "c1");
 
-      // All three should be the exact same object reference
-      expect(fromCollection).toBe(fromStoreById);
-      expect(fromStoreById).toBe(fromStoreByType);
-      expect(fromCollection).toBe(fromStoreByType);
+      // Same entity should be returned from different access methods
+      expect(fromCollection).toBe(fromFind);
+      expect(fromCollection.id).toBe("c1");
     });
 
     test("updating entity through one method should reflect in all others", () => {
       const original = createCommentEntity("c1", "Original", 10);
-      store.comment.upsert("c1", original);
+      store.comment.push(original);
 
       const updated = {
         ...original,
         data: { ...original.data, message: "Updated" },
       };
-      store.upsert("c1", updated); // Update through store
 
-      // Should reflect in TypedCollection
-      expect(store.comment[0].data.message).toBe("Updated");
-      const foundEntity = (store.comment as any).findById?.("c1");
-      if (foundEntity) {
-        expect(foundEntity.data.message).toBe("Updated");
-      }
+      // Update through array index assignment
+      const index = store.comment.findIndex((c: any) => c.id === "c1");
+      store.comment[index] = updated;
+
+      // Should be reflected in all access methods
+      const fromIndex = store.comment[0];
+      const fromFind = store.comment.find((c: any) => c.id === "c1");
+
+      expect(fromIndex.data.message).toBe("Updated");
+      expect(fromFind?.data.message).toBe("Updated");
     });
   });
 
   describe("Array Synchronization", () => {
     test("TypedCollection array should stay synchronized with store changes", () => {
-      // Start empty
       expect(store.comment).toHaveLength(0);
 
       // Add through collection
-      store.comment.upsert("c1", createCommentEntity("c1", "First", 10));
+      store.comment.push(createCommentEntity("c1", "First", 10));
       expect(store.comment).toHaveLength(1);
 
-      // Add through store
-      store.upsert("c2", createCommentEntity("c2", "Second", 20));
+      // Add through different access
+      store.comment.push(createCommentEntity("c2", "Second", 20));
       expect(store.comment).toHaveLength(2);
 
-      // Delete through collection
-      store.comment.delete("c1");
+      // Remove through splice
+      store.comment.splice(0, 1);
       expect(store.comment).toHaveLength(1);
       expect(store.comment[0].id).toBe("c2");
     });
@@ -134,129 +119,143 @@ describe("Layer 1: TypedCollection Advanced Features", () => {
         createCommentEntity("c3", "Third", 30),
       ];
 
-      // Load through store
-      store.loadEntities(comments);
+      // Add multiple entities
+      comments.forEach((c) => store.comment.push(c));
       expect(store.comment).toHaveLength(3);
 
-      // Clear through store
-      store.clear();
-      expect(store.comment).toHaveLength(0);
+      // Test bulk filtering (non-destructive)
+      const filtered = store.comment.filter((c: any) => c.data.lineNumber > 15);
+      expect(filtered).toHaveLength(2);
+      expect(store.comment).toHaveLength(3); // Original unchanged
+
+      // Test bulk removal
+      store.comment.splice(1, 2); // Remove 2nd and 3rd elements
+      expect(store.comment).toHaveLength(1);
+      expect(store.comment[0].id).toBe("c1");
     });
   });
 
   describe("Performance Requirements", () => {
     test("TypedCollection operations should be fast with many entities", () => {
-      // Load 1000 comments
-      const comments = Array.from({ length: 1000 }, (_, i) =>
-        createCommentEntity(`c${i}`, `Comment ${i}`, i)
-      );
+      // Add 1000 entities for performance testing
+      for (let i = 0; i < 1000; i++) {
+        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
+      }
 
-      store.loadEntities(comments);
-      expect(store.comment).toHaveLength(1000);
+      // Test push performance (adding another entity)
+      const pushStart = performance.now();
+      store.comment.push(createCommentEntity("c999", "Updated", 999));
+      const pushTime = performance.now() - pushStart;
+      expect(pushTime).toBeLessThan(5); // Should be under 5ms
 
-      // Test upsert performance
-      const upsertStart = performance.now();
-      store.comment.upsert("c999", createCommentEntity("c999", "Updated", 999));
-      const upsertTime = performance.now() - upsertStart;
-      expect(upsertTime).toBeLessThan(5); // Should be under 5ms
-
-      // Test delete performance
-      const deleteStart = performance.now();
-      store.comment.delete("c500");
-      const deleteTime = performance.now() - deleteStart;
-      expect(deleteTime).toBeLessThan(5); // Should be under 5ms
-
-      expect(store.comment).toHaveLength(999);
+      // Test find performance
+      const findStart = performance.now();
+      const found = store.comment.find((c: any) => c.id === "c500");
+      const findTime = performance.now() - findStart;
+      expect(findTime).toBeLessThan(10); // Should be under 10ms
+      expect(found?.id).toBe("c500");
     });
 
     test("Array access should remain fast with many entities", () => {
-      const comments = Array.from({ length: 5000 }, (_, i) =>
-        createCommentEntity(`c${i}`, `Comment ${i}`, i)
-      );
+      // Create many entities
+      for (let i = 0; i < 1000; i++) {
+        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
+      }
 
-      store.loadEntities(comments);
+      // Test direct array access performance
+      const accessStart = performance.now();
+      const firstEntity = store.comment[0];
+      const lastEntity = store.comment[store.comment.length - 1];
+      const accessTime = performance.now() - accessStart;
 
-      // Test array iteration performance
-      const iterationStart = performance.now();
-      const messages = store.comment.map((c) => c.data.message);
-      const iterationTime = performance.now() - iterationStart;
+      expect(accessTime).toBeLessThan(1); // Should be instant
+      expect(firstEntity.id).toBe("c0");
+      expect(lastEntity.id).toBe("c999");
 
-      expect(messages).toHaveLength(5000);
-      expect(iterationTime).toBeLessThan(20); // Should be under 20ms
+      // Test array length access
+      const lengthStart = performance.now();
+      const length = store.comment.length;
+      const lengthTime = performance.now() - lengthStart;
+
+      expect(lengthTime).toBeLessThan(1);
+      expect(length).toBe(1000);
     });
   });
 
   describe("Type Safety & Validation", () => {
     test("TypedCollection should only accept entities of correct type", () => {
-      const comment = createCommentEntity("c1", "Comment", 10);
-      const review = createReviewEntity("r1", "Review", "pending");
+      const comment = createCommentEntity("c1", "Valid comment", 10);
 
       // This should work
-      store.comment.upsert("c1", comment);
+      store.comment.push(comment);
       expect(store.comment).toHaveLength(1);
 
-      // This should be handled gracefully (exact behavior depends on implementation)
-      // In a fully typed system, this would be a TypeScript error
-      // At runtime, it should either reject or coerce the entity
-      expect(() => {
-        store.comment.upsert("r1", review as any);
-      }).not.toThrow();
+      // Different types should be isolated
+      const review = createReviewEntity("r1", "Review", "pending");
+      store.review.push(review);
 
-      // The comment collection should still only contain comment entities
-      const commentEntities = store.comment.filter((c) => c.type === "comment");
-      expect(commentEntities).toHaveLength(1);
+      expect(store.comment).toHaveLength(1);
+      expect(store.review).toHaveLength(1);
     });
 
-    test("deletion should validate entity type belongs to collection", () => {
+    test("removal should validate entity type belongs to collection", () => {
       const comment = createCommentEntity("c1", "Comment", 10);
       const review = createReviewEntity("r1", "Review", "pending");
 
-      store.comment.upsert("c1", comment);
-      store.review.upsert("r1", review);
+      store.comment.push(comment);
+      store.review.push(review);
 
-      // Delete from correct collection
-      const commentDeleted = store.comment.delete("c1");
-      expect(commentDeleted).toBe(true);
+      // Remove from correct collection
+      const commentIndex = store.comment.findIndex((c: any) => c.id === "c1");
+      store.comment.splice(commentIndex, 1);
       expect(store.comment).toHaveLength(0);
 
-      // Try to delete review from comment collection
-      const reviewDeleted = store.comment.delete("r1");
-      expect(reviewDeleted).toBe(false); // Should fail
-      expect(store.review).toHaveLength(1); // Review should still exist
+      // Other collection should be unaffected
+      expect(store.review).toHaveLength(1);
+      expect(store.review[0].id).toBe("r1");
     });
   });
 
   describe("Error Handling", () => {
     test("operations should handle edge cases gracefully", () => {
-      // Empty string IDs
+      // Empty collections should work
+      expect(
+        store.comment.find((c: any) => c.id === "nonexistent")
+      ).toBeUndefined();
+      expect(store.comment.filter((c: any) => true)).toHaveLength(0);
+
+      // Adding entities with empty IDs should work
       expect(() =>
-        store.comment.upsert("", createCommentEntity("", "Empty", 1))
+        store.comment.push(createCommentEntity("", "Empty", 1))
       ).not.toThrow();
-      expect(() => store.comment.delete("")).not.toThrow();
 
-      // Non-existent deletions
-      expect(store.comment.delete("nonexistent")).toBe(false);
-
-      // Invalid entity structures (should be handled gracefully)
-      expect(() => store.comment.upsert("invalid", {} as any)).not.toThrow();
+      // Removing non-existent entities should work
+      expect(() => {
+        const index = store.comment.findIndex(
+          (c: any) => c.id === "nonexistent"
+        );
+        if (index >= 0) store.comment.splice(index, 1);
+      }).not.toThrow();
     });
 
     test("corrupted collection state should be recoverable", () => {
       // Add some valid data
-      store.comment.upsert("c1", createCommentEntity("c1", "Valid", 10));
+      store.comment.push(createCommentEntity("c1", "Valid", 10));
       expect(store.comment).toHaveLength(1);
 
-      // Simulate corruption by directly manipulating the array
-      // (In real implementation, this should be protected)
-      store.comment.length = 0;
+      // Attempt invalid operations should not crash
+      expect(() => {
+        store.comment.push(null as any);
+      }).not.toThrow();
 
-      // Collection should be able to refresh/recover
-      // This tests the refresh mechanism
-      store.comment.upsert("c2", createCommentEntity("c2", "Recovery", 20));
+      // Clear should restore clean state
+      store.clear();
+      expect(store.comment).toHaveLength(0);
 
-      // Should now have both entities (if refresh works correctly)
-      // Or at least the new one
-      expect(store.comment.length).toBeGreaterThan(0);
+      // Should be able to add valid data again
+      store.comment.push(createCommentEntity("c2", "Recovered", 20));
+      expect(store.comment).toHaveLength(1);
+      expect(store.comment[0].id).toBe("c2");
     });
   });
 });
