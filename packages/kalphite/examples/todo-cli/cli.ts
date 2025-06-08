@@ -6,6 +6,8 @@ import {
   generateId,
   isOverdue,
   sortTodosByPriority,
+  type Project,
+  type Todo,
   type TodoPriority,
   type TodoStatus,
 } from "./schema";
@@ -18,22 +20,25 @@ import { getStoreStats, loadDemoData, todoStore } from "./store";
 const commands = {
   // List todos
   list: () => {
-    const todos = todoStore.todo;
-    const projects = todoStore.project;
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
+    );
+    const sortedTodos = sortTodosByPriority(todos);
 
-    if (todos.length === 0) {
+    if (sortedTodos.length === 0) {
       console.log(
         "📭 No todos found. Use 'todo add \"Task name\"' to create one."
       );
       return;
     }
 
-    console.log(`\n📝 Todo List (${todos.length} items)\n`);
-
-    const sortedTodos = sortTodosByPriority(todos);
+    console.log(`\n📝 Todo List (${sortedTodos.length} items)\n`);
 
     sortedTodos.forEach((todo, index) => {
-      const project = projects.findById(todo.data.projectId || "");
+      const project = todoStore.project.find(
+        (p): p is Project =>
+          p.type === "project" && p.id === (todo.data.projectId || "")
+      );
       const projectName = project ? ` [${project.data.name}]` : "";
       const dueText = todo.data.dueDate
         ? ` (due: ${formatDueDate(todo.data.dueDate)})`
@@ -68,8 +73,8 @@ const commands = {
       priority: "medium",
     });
 
-    const result = todoStore.todo.upsert(todo.id, todo);
-    console.log(`✅ Added todo: "${result.data.title}" (ID: ${result.id})`);
+    todoStore.upsert(todo.id, todo);
+    console.log(`✅ Added todo: "${todo.data.title}" (ID: ${todo.id})`);
 
     // Show immediate update - demonstrates memory-first approach
     console.log(`📊 Total todos: ${todoStore.todo.length}`);
@@ -78,7 +83,9 @@ const commands = {
   // Complete a todo
   complete: (id: string) => {
     const todoIndex = parseInt(id) - 1;
-    const todos = todoStore.todo;
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
+    );
 
     if (todoIndex < 0 || todoIndex >= todos.length) {
       console.log("❌ Invalid todo number");
@@ -92,14 +99,16 @@ const commands = {
       updatedAt: Date.now(),
     };
 
-    todoStore.todo.upsert(todo.id, updatedTodo);
+    todoStore.upsert(todo.id, updatedTodo);
     console.log(`✅ Completed: "${todo.data.title}"`);
   },
 
   // Delete a todo
   delete: (id: string) => {
     const todoIndex = parseInt(id) - 1;
-    const todos = todoStore.todo;
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
+    );
 
     if (todoIndex < 0 || todoIndex >= todos.length) {
       console.log("❌ Invalid todo number");
@@ -107,13 +116,8 @@ const commands = {
     }
 
     const todo = todos[todoIndex];
-    const deleted = todoStore.todo.delete(todo.id);
-
-    if (deleted) {
-      console.log(`🗑️  Deleted: "${todo.data.title}"`);
-    } else {
-      console.log("❌ Failed to delete todo");
-    }
+    todoStore.delete(todo.id);
+    console.log(`🗑️  Deleted: "${todo.data.title}"`);
   },
 
   // Filter by status
@@ -126,9 +130,10 @@ const commands = {
       return;
     }
 
-    const filtered = todoStore.todo.where(
-      (todo) => todo.data.status === status
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
     );
+    const filtered = todos.filter((todo) => todo.data.status === status);
     console.log(
       `\n📝 Todos with status "${status}" (${filtered.length} items)\n`
     );
@@ -149,9 +154,10 @@ const commands = {
       return;
     }
 
-    const filtered = todoStore.todo.where((todo) =>
-      todo.data.tags.includes(tagName)
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
     );
+    const filtered = todos.filter((todo) => todo.data.tags.includes(tagName));
     console.log(`\n🏷️  Todos tagged "${tagName}" (${filtered.length} items)\n`);
 
     filtered.forEach((todo, index) => {
@@ -165,7 +171,9 @@ const commands = {
 
   // Show projects
   projects: () => {
-    const projects = todoStore.project;
+    const projects = todoStore.project.filter(
+      (entity): entity is Project => entity.type === "project"
+    );
 
     if (projects.length === 0) {
       console.log("📁 No projects found.");
@@ -175,7 +183,10 @@ const commands = {
     console.log(`\n📁 Projects (${projects.length})\n`);
 
     projects.forEach((project, index) => {
-      const projectTodos = todoStore.todo.where(
+      const todos = todoStore.todo.filter(
+        (entity): entity is Todo => entity.type === "todo"
+      );
+      const projectTodos = todos.filter(
         (todo) => todo.data.projectId === project.id
       );
       const completed = projectTodos.filter(
@@ -204,21 +215,26 @@ const commands = {
         priority: i % 4 === 0 ? "urgent" : "medium",
         status: "pending",
       });
-      todoStore.todo.upsert(todo.id, todo);
+      todoStore.upsert(todo.id, todo);
     }
 
     const endTime = performance.now();
     const duration = endTime - startTime;
 
     console.log(`✅ Created 1000 todos in ${duration.toFixed(2)}ms`);
-    console.log(`📊 Total todos now: ${todoStore.todo.length}`);
+    console.log(
+      `📊 Total todos now: ${
+        todoStore.todo.filter((e) => e.type === "todo").length
+      }`
+    );
     console.log(`⚡ Average: ${(duration / 1000).toFixed(3)}ms per todo`);
 
     // Test querying performance
     const queryStart = performance.now();
-    const urgentTodos = todoStore.todo.where(
-      (todo) => todo.data.priority === "urgent"
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
     );
+    const urgentTodos = todos.filter((todo) => todo.data.priority === "urgent");
     const queryTime = performance.now() - queryStart;
 
     console.log(
