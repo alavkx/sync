@@ -8,5 +8,5 @@ export type { KalphiteConfig } from "./types/config";
 export type { Entity, EntityId, EntityType } from "./types/entity";
 export type { ChangeOperation, FlushOperation } from "./types/operations";
 
-// Standard Schema integration
-export type { StandardSchemaV1 } from "@standard-schema/spec";
+// Standard Schema integration (would be added when needed)
+// export type { StandardSchemaV1 } from "@standard-schema/spec";

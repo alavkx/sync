@@ -1,6 +1,6 @@
 packages:
   - "packages/kalphite"
-  - "packages/code-review-app"
+  - "packages/code-review"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
