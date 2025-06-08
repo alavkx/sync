@@ -314,7 +314,7 @@ describe("Layer 4: Network Sync", () => {
       expect(sortedByTime[2].entity.message).toBe("Second");
     });
 
-    test.skip("should handle concurrent edits correctly", async () => {
+    test("should handle concurrent edits correctly", async () => {
       const conflictResolutions: any[] = [];
       syncEngine.on("conflictResolved", (resolution: any) => {
         conflictResolutions.push(resolution);
@@ -366,7 +366,7 @@ describe("Layer 4: Network Sync", () => {
       expect(resolution.strategy).toBe("operational_transform");
     });
 
-    test.skip("should preserve user intent during merges", async () => {
+    test("should preserve user intent during merges", async () => {
       const mergedEntities: any[] = [];
       syncEngine.on("entityMerged", (merged: any) => {
         mergedEntities.push(merged);
