@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { clearAllData, exportData } from "../../store";
 import "./App.css";
 import { CreateReviewModal } from "./components/CreateReviewModal";
 import { ReviewDetails } from "./components/ReviewDetails";
@@ -83,6 +84,32 @@ export default function App() {
               >
                 🚀 Load Demo Data
               </button>
+            )}
+            {reviews.length > 0 && (
+              <>
+                <button
+                  className="btn btn-secondary"
+                  onClick={exportData}
+                  title="Export data to JSON file"
+                >
+                  📁 Export Data
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Are you sure you want to clear all data? This cannot be undone."
+                      )
+                    ) {
+                      clearAllData();
+                    }
+                  }}
+                  title="Clear all stored data"
+                >
+                  🗑️ Clear Data
+                </button>
+              </>
             )}
             <button
               className="btn btn-primary"
@@ -189,7 +216,7 @@ export default function App() {
           </span>
         </div>
         <div className="footer-info">
-          Real-time updates powered by Kalphite ⚡
+          💾 Data automatically saved to local storage • Powered by Kalphite ⚡
         </div>
       </footer>
     </div>

@@ -1,3 +1,4 @@
+import { MemoryFlushEngine } from "../../src/engines/MemoryFlushEngine";
 import { createKalphiteStore } from "../../src/store/KalphiteStore";
 import {
   EntitySchema,
@@ -12,11 +13,110 @@ import {
 // CORE-REVIEW STORE - Kalphite Integration
 // High-performance code review management with Kalphite's memory-first architecture
 
-// Create the main Kalphite store
+// Create a flush engine for persistence (works offline)
+const flushEngine = new MemoryFlushEngine({
+  flushTarget: async (changes) => {
+    console.log("💾 Persisting changes:", changes.length, "entities");
+
+    // Store locally first (always works)
+    const stored = localStorage.getItem("kalphite-review-data") || "[]";
+    const data = JSON.parse(stored);
+
+    changes.forEach((change) => {
+      const existing = data.findIndex(
+        (item: any) => item.entityId === change.entityId
+      );
+      if (change.operation === "delete") {
+        if (existing >= 0) {
+          data.splice(existing, 1);
+        }
+      } else {
+        if (existing >= 0) {
+          data[existing] = change;
+        } else {
+          data.push(change);
+        }
+      }
+    });
+
+    localStorage.setItem("kalphite-review-data", JSON.stringify(data));
+    console.log("💿 Stored locally:", data.length, "entities");
+
+    // Try network persistence (optional)
+    try {
+      const response = await fetch("http://localhost:3001/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changes }),
+      });
+
+      if (response.ok) {
+        console.log("☁️ Network sync successful");
+      } else {
+        console.warn("❌ Network sync failed:", response.status);
+      }
+    } catch (error) {
+      console.warn(
+        "❌ Network sync failed (offline mode):",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  },
+  debounceMs: 1000, // 1 second debounce for better demo visibility
+  maxBatchSize: 50,
+});
+
+// Create the main Kalphite store with persistence
 export const reviewStore = createKalphiteStore(EntitySchema, {
   enableDevtools: true,
   logLevel: "info",
+  flushEngine,
 });
+
+// Load any previously stored data from localStorage
+function loadStoredData() {
+  try {
+    const stored = localStorage.getItem("kalphite-review-data");
+    if (stored) {
+      const data = JSON.parse(stored);
+      const entities = data.map((change: any) => change.entity).filter(Boolean);
+      if (entities.length > 0) {
+        reviewStore.loadEntities(entities as any);
+        console.log(
+          "💿 Loaded from local storage:",
+          entities.length,
+          "entities"
+        );
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to load stored data:", error);
+  }
+}
+
+// Auto-load stored data on initialization
+loadStoredData();
+
+// Export data management functions
+export function clearAllData() {
+  reviewStore.clear();
+  localStorage.removeItem("kalphite-review-data");
+  console.log("🗑️ Cleared all data");
+}
+
+export function exportData() {
+  const data = localStorage.getItem("kalphite-review-data");
+  if (data) {
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "review-data.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    console.log("📁 Data exported");
+  }
+}
 
 // Convenient collection accessors
 export const reviews = reviewStore.review;
@@ -28,10 +128,6 @@ export const tasks = reviewStore.task;
 // Store management functions
 export function getStore() {
   return reviewStore;
-}
-
-export function clearStore() {
-  reviewStore.clear();
 }
 
 export function getStoreStats() {
