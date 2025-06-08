@@ -247,7 +247,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(allComments).toHaveLength(0);
     });
 
-    test.skip("should handle bulk deletes", async () => {
+    test("should handle bulk deletes", async () => {
       const entities = Array.from({ length: 10 }, (_, i) => ({
         id: `c${i}`,
         type: "comment" as const,
@@ -268,7 +268,7 @@ describe("Layer 3: Frontend Database", () => {
   });
 
   describe("Data Integrity and Resilience", () => {
-    test.skip("should provide backup/export functionality", async () => {
+    test("should provide backup/export functionality", async () => {
       await db.upsert("comment", "c1", commentEntity);
       await db.upsert("review", "r1", reviewEntity);
 
@@ -405,7 +405,7 @@ describe("Layer 3: Frontend Database", () => {
   });
 
   // Keep the original demo test as a comprehensive integration test
-  test.skip("INTEGRATION: complete frontend database workflow", async () => {
+  test("INTEGRATION: complete frontend database workflow", async () => {
     // Initialize database
     expect(db).toBeDefined();
     expect(await db.isReady()).toBe(true);
