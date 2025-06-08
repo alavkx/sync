@@ -183,13 +183,16 @@ export class NetworkSyncEngine {
       return;
     }
 
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
     this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+
+    // Emit immediately to signal reconnection attempt
+    this.emit("reconnecting", this.reconnectAttempts);
 
     setTimeout(() => {
-      this.emit("reconnecting", this.reconnectAttempts);
       this.connect().catch(() => {
         // Reconnection failed, will try again
+        this.handleReconnection();
       });
     }, delay);
   }
