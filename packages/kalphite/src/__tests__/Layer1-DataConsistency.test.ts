@@ -1,12 +1,40 @@
-import { beforeEach, describe, expect, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { beforeEach, describe, expect, it, test } from "vitest";
+import { createKalphiteStore } from "../store/KalphiteStore";
+import type { Entity } from "../types/entity";
 import { createCommentEntity, createReviewEntity } from "./setup";
+
+interface CommentData {
+  message: string;
+  score: number;
+}
+
+const CommentSchema = {
+  "~standard": {
+    version: 1,
+    vendor: "kalphite",
+    validate: (data: unknown) => {
+      if (typeof data !== "object" || data === null) {
+        return { issues: [{ message: "Data must be an object" }] };
+      }
+      const { message, score } = data as CommentData;
+      if (typeof message !== "string") {
+        return { issues: [{ message: "Message must be a string" }] };
+      }
+      if (typeof score !== "number") {
+        return { issues: [{ message: "Score must be a number" }] };
+      }
+      return { value: data };
+    },
+  },
+} as const;
+
+type CommentSchema = typeof CommentSchema;
 
 describe("Layer 1: Data Consistency & Integrity", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore<CommentSchema>();
   });
 
   describe("Entity Reference Integrity", () => {
@@ -429,5 +457,33 @@ describe("Layer 1: Data Consistency & Integrity", () => {
         expect(r.id).toMatch(/mixed-review-\d+/);
       });
     });
+  });
+
+  it("should handle empty collections correctly", () => {
+    const store = createKalphiteStore<CommentSchema>();
+    expect(store.comment.filter(() => true)).toHaveLength(0);
+  });
+
+  it("should maintain data consistency", () => {
+    const store = createKalphiteStore<CommentSchema>();
+    const comment: Entity & { data: CommentData } = {
+      id: "c1",
+      type: "comment",
+      data: {
+        message: "Test comment",
+        score: 5,
+      },
+      updatedAt: Date.now(),
+    };
+
+    store.upsert(comment.id, comment);
+    const result = store.getById(comment.id) as
+      | (Entity & { data: CommentData })
+      | undefined;
+    expect(result).toBeDefined();
+    if (result) {
+      expect(result.data.message).toBe("Test comment");
+      expect(result.data.score).toBe(5);
+    }
   });
 });

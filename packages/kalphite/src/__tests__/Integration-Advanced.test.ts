@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { KalphiteStore } from "../store/KalphiteStore";
+import type { Entity } from "../types/entity";
 import { createCommentEntity } from "./setup";
 
 describe("Integration: Advanced Patterns", () => {
@@ -111,7 +112,7 @@ describe("Integration: Advanced Patterns", () => {
     });
 
     test("should handle memory pressure scenarios", () => {
-      const largeDataSets = [];
+      const largeDataSets: Entity[] = [];
 
       for (let i = 0; i < 10; i++) {
         const largeEntities = Array.from({ length: 500 }, (_, j) => {
@@ -123,12 +124,12 @@ describe("Integration: Advanced Patterns", () => {
           return { id: `large-${i}-${j}`, type: "comment", data: largeData };
         });
 
-        largeDataSets.push(largeEntities);
+        largeDataSets.push(...largeEntities);
       }
 
       expect(() => {
         largeDataSets.forEach((dataset) => {
-          store.loadEntities(dataset);
+          store.upsert(dataset.id, dataset);
           // Simulate some processing
           store.comment.filter((c: any) => c.data.lineNumber % 2 === 0);
           // Clear periodically to avoid memory issues
@@ -627,6 +628,37 @@ describe("Integration: Advanced Patterns", () => {
       expect(results).toHaveLength(500);
       expect(endTime - startTime).toBeLessThan(500); // 500 operations in under 500ms
       expect(store.comment.length).toBeGreaterThanOrEqual(0); // Should remain functional
+    });
+  });
+
+  describe("Advanced Features", () => {
+    it("should handle large datasets", () => {
+      const largeDataSets: Entity[] = [];
+
+      // Add test data
+      for (let i = 0; i < 1000; i++) {
+        largeDataSets.push({
+          id: `entity-${i}`,
+          type: "test",
+          data: {
+            value: i,
+          },
+        });
+      }
+
+      // Test operations
+      largeDataSets.forEach((dataset) => {
+        store.upsert(dataset.id, dataset);
+      });
+
+      // Verify data
+      largeDataSets.forEach((dataset) => {
+        const result = store.getById(dataset.id);
+        expect(result).toBeDefined();
+        if (result) {
+          expect(result.data.value).toBe(dataset.data.value);
+        }
+      });
     });
   });
 });

@@ -64,20 +64,22 @@ class MockHttpClient {
   }
 }
 
-describe("TodoCLI: End-to-End Sync Integration", () => {
+describe("Todo CLI: Sync Integration", () => {
   let store: any;
   let syncEngine: OperationSyncEngine;
   let mockHttpClient: MockHttpClient;
 
   const config: OperationSyncConfig = {
-    baseUrl: "http://localhost:3001",
+    baseUrl: "http://localhost:3000",
     operationsEndpoint: "/sync/operations",
     stateEndpoint: "/sync/state",
-    notificationUrl: "ws://localhost:3001/sync/notify",
-    clientId: "cli-client-1",
-    userId: "user-1",
-    batchSize: 5,
-    offlineQueueLimit: 100,
+    notificationUrl: "ws://localhost:3000/ws",
+    wsUrl: "ws://localhost:3000/ws",
+    roomId: "test-room",
+    clientId: "test-client",
+    userId: "test-user",
+    batchSize: 10,
+    offlineQueueLimit: 1000,
   };
 
   // Helper functions
@@ -118,7 +120,7 @@ describe("TodoCLI: End-to-End Sync Integration", () => {
   });
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = KalphiteStore(undefined, { syncConfig: config });
     syncEngine = new OperationSyncEngine(config);
     mockHttpClient = new MockHttpClient();
 
@@ -428,5 +430,23 @@ describe("TodoCLI: End-to-End Sync Integration", () => {
       );
       expect(offlineRequest).toBeDefined();
     });
+  });
+
+  it("should handle sync configuration", () => {
+    const config: OperationSyncConfig = {
+      baseUrl: "http://localhost:3000",
+      operationsEndpoint: "/sync/operations",
+      stateEndpoint: "/sync/state",
+      notificationUrl: "ws://localhost:3000/ws",
+      wsUrl: "ws://localhost:3000/ws",
+      roomId: "test-room",
+      clientId: "test-client",
+      userId: "test-user",
+      batchSize: 10,
+      offlineQueueLimit: 1000,
+    };
+
+    const store = new KalphiteStore(undefined, { syncConfig: config });
+    expect(store).toBeDefined();
   });
 });

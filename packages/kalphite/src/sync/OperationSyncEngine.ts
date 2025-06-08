@@ -60,7 +60,7 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
     await this.flushBatchedOperations();
   }
 
-  async executeOperation(name: string, args: any[]): Promise<void> {
+  async executeOperation(name: string, args: unknown[]): Promise<void> {
     const operation: PendingOperation = {
       name,
       args,
@@ -70,7 +70,7 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
     };
 
     this.pendingOperations.set(operation.id, operation);
-    const affectedEntities = this.applyOptimisticUpdate(operation);
+    this.applyOptimisticUpdate(operation);
 
     if (this.isOnline()) {
       this.batchedOperations.push(operation);
@@ -197,10 +197,10 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
     }
   }
 
-  private applyOptimisticUpdate(operation: PendingOperation): Entity[] {
-    const affectedEntities: Entity[] = [];
-    // Implementation of optimistic updates
-    return affectedEntities;
+  private applyOptimisticUpdate(operation: PendingOperation): void {
+    // Apply optimistic updates based on operation type
+    // This is a placeholder for actual implementation
+    this.emit("optimisticUpdate", operation);
   }
 
   private applyStatePatch(patch: StatePatch): void {

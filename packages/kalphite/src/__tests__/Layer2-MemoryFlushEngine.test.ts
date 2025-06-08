@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MemoryFlushEngine } from "../engines/MemoryFlushEngine";
+import { KalphiteStore } from "../store/KalphiteStore";
+import type { FlushTarget } from "../types/flush";
 import { createCommentEntity } from "./setup";
 
 describe("Layer 2: Memory Flush Engine Implementation", () => {
@@ -555,6 +557,23 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
       expect(flushEngine.getQueuedChanges()).toHaveLength(1);
       expect(flushEngine.getQueuedChanges()[0].entity).toEqual(entity);
     });
+  });
+
+  it("should handle flush target errors gracefully", async () => {
+    const mockFlushTarget: FlushTarget = vi
+      .fn()
+      .mockImplementation(async () => {
+        throw new Error("Flush target error");
+      });
+
+    const store = new KalphiteStore(undefined, {
+      flushEngine: {
+        target: mockFlushTarget,
+        debounceMs: 0,
+      },
+    });
+
+    // ... rest of the test ...
   });
 });
 

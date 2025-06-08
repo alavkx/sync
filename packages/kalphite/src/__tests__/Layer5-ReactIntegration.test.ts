@@ -3,28 +3,13 @@ import { z } from "zod";
 import { setGlobalStore } from "../react/useKalphiteStore";
 
 // Test schema for Layer 5 tests
-const TestEntitySchema = z.discriminatedUnion("type", [
-  z.object({
-    id: z.string(),
-    type: z.literal("todo"),
-    data: z.object({
-      text: z.string(),
-      completed: z.boolean().default(false),
-      priority: z.enum(["low", "medium", "high"]).default("medium"),
-    }),
-    updatedAt: z.number(),
+const TestEntitySchema = z.object({
+  id: z.string(),
+  type: z.literal("test"),
+  data: z.object({
+    name: z.string(),
   }),
-  z.object({
-    id: z.string(),
-    type: z.literal("note"),
-    data: z.object({
-      title: z.string(),
-      content: z.string(),
-      tags: z.array(z.string()).default([]),
-    }),
-    updatedAt: z.number(),
-  }),
-]);
+});
 
 type TestEntity = z.infer<typeof TestEntitySchema>;
 

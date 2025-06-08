@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
 import { z } from "zod";
 import { FrontendDatabase } from "../database/FrontendDatabase";
 
@@ -430,6 +430,13 @@ describe("Layer 3: Frontend Database", () => {
     expect(retrievedComment?.data.message).toBe("Updated comment");
 
     // Clean up would be handled by afterEach
+  });
+
+  it("should handle delete operations", async () => {
+    const db = new FrontendDatabase();
+    await db.delete("review", "r1");
+    const result = await db.getById("review", "r1");
+    expect(result).toBeNull();
   });
 });
 

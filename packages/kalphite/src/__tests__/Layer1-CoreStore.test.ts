@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Layer 1: Core Store Operations", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   describe("Array Interface", () => {

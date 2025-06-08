@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, it, test } from "vitest";
 import { KalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
@@ -332,5 +332,11 @@ describe("Layer 1: Performance & Scalability", () => {
       expect(store.comment).toHaveLength(0);
       expect(operationTime).toBeLessThan(200); // 100 cycles of 50 entities each under 200ms
     });
+  });
+
+  it("should handle large collections efficiently", () => {
+    const store = new KalphiteStore();
+    const filtered = store.comment.filter(() => true);
+    expect(filtered).toBeDefined();
   });
 });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { KalphiteStore } from "../store/KalphiteStore";
+import { createKalphiteStore } from "../store/KalphiteStore";
 
 // Mock Standard Schema implementation for testing
 const createMockSchema = () => ({
@@ -74,7 +74,7 @@ describe("Standard Schema Integration", () => {
 
     test("should reject async validation (memory-first requirement)", () => {
       const asyncSchema = createAsyncMockSchema();
-      const store = KalphiteStore(asyncSchema);
+      const store = createKalphiteStore(asyncSchema);
 
       expect(() => {
         // This should throw because Kalphite requires synchronous validation
@@ -107,8 +107,8 @@ describe("Standard Schema Integration", () => {
       };
 
       // Both should work with KalphiteStore
-      expect(() => KalphiteStore(valibotLikeSchema)).not.toThrow();
-      expect(() => KalphiteStore(zodLikeSchema)).not.toThrow();
+      expect(() => createKalphiteStore(valibotLikeSchema)).not.toThrow();
+      expect(() => createKalphiteStore(zodLikeSchema)).not.toThrow();
     });
 
     test("should handle validation errors correctly", () => {
@@ -132,7 +132,7 @@ describe("Standard Schema Integration", () => {
         },
       };
 
-      const store = KalphiteStore(strictSchema);
+      const store = createKalphiteStore(strictSchema);
       const invalidData = { id: "1", type: "test" }; // missing requiredField
 
       expect(() => {
@@ -161,7 +161,7 @@ describe("Standard Schema Integration", () => {
         },
       };
 
-      const store = KalphiteStore(pathAwareSchema);
+      const store = createKalphiteStore(pathAwareSchema);
 
       try {
         store.comment.push({ id: "1", type: "test" });
@@ -178,7 +178,7 @@ describe("Standard Schema Integration", () => {
 
     beforeEach(() => {
       const schema = createMockSchema();
-      store = KalphiteStore(schema);
+      store = createKalphiteStore(schema);
     });
 
     test("should validate entities on push", () => {
@@ -223,7 +223,7 @@ describe("Standard Schema Integration", () => {
         },
       };
 
-      const discriminatedStore = KalphiteStore(discriminatedSchema);
+      const discriminatedStore = createKalphiteStore(discriminatedSchema);
 
       const user = {
         id: "1",
@@ -264,7 +264,7 @@ describe("Standard Schema Integration", () => {
         },
       };
 
-      const store = KalphiteStore(performanceSchema);
+      const store = createKalphiteStore(performanceSchema);
 
       const startTime = performance.now();
 
@@ -313,7 +313,7 @@ describe("Standard Schema Integration", () => {
         },
       };
 
-      const store = KalphiteStore(compliantSchema);
+      const store = createKalphiteStore(compliantSchema);
 
       // Valid input should succeed
       store.comment.push({ id: "1", type: "test", data: {} });
@@ -341,7 +341,7 @@ describe("Standard Schema Integration", () => {
         },
       };
 
-      const store = KalphiteStore(compliantSchema);
+      const store = createKalphiteStore(compliantSchema);
       expect(() => {
         store.comment.push({ id: "1", type: "test" });
       }).not.toThrow();

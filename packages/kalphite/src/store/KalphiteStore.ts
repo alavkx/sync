@@ -1,38 +1,33 @@
 import type { KalphiteConfig } from "../types/config";
-import type { EntityId } from "../types/entity";
+import type { Entity, EntityId } from "../types/entity";
 import type { FlushEngine } from "../types/flush";
 import type { StandardSchemaV1 } from "../types/StandardSchema";
 
 type InferOutput<T extends StandardSchemaV1> = StandardSchemaV1.InferOutput<T>;
 
-export type KalphiteStoreType<TSchema extends StandardSchemaV1 = any> =
-  KalphiteStoreImpl<TSchema> & Record<string, any[]>;
+export type KalphiteStoreType<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1
+> = KalphiteStore<TSchema> & Record<string, InferOutput<TSchema>[]>;
 
-class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
+export class KalphiteStore<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1
+> {
   private entities = new Map<EntityId, InferOutput<TSchema>>();
+  protected typeArrays = new Map<string, InferOutput<TSchema>[]>();
   private subscribers = new Set<() => void>();
   private schema?: TSchema;
   private config: KalphiteConfig;
-  private typeArrays = new Map<string, any[]>();
+  private flushEngine?: FlushEngine<InferOutput<TSchema>>;
   private suppressNotifications = false;
   private nestedProxyCache = new WeakMap<object, any>();
   private proxyCreationDepth = 0;
   private pushCallDepth = 0;
   private isNotifying = false;
   private notificationQueue: (() => void)[] = [];
-  private flushEngine?: FlushEngine<InferOutput<TSchema>>;
 
   constructor(schema?: TSchema, config: KalphiteConfig = {}) {
     this.schema = schema;
-    this.config = {
-      flushDebounceMs: 100,
-      networkPushDebounceMs: 1000,
-      networkPullIntervalMs: 5000,
-      databaseName: "kalphite-db",
-      enableDevtools: false,
-      logLevel: "info",
-      ...config,
-    };
+    this.config = config;
     this.flushEngine = config.flushEngine;
   }
 
@@ -399,19 +394,14 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
 
   // Refresh all type arrays by rebuilding them from entities
   private refreshTypeArrays(): void {
-    this.typeArrays.forEach((array, type) => {
-      // Get current entities of this type
-      const currentEntities = Array.from(this.entities.values()).filter(
-        (entity) => entity && (entity as any).type === type
-      );
-
-      // Clear and repopulate the existing array
-      array.length = 0;
-      const proxiedEntities = currentEntities.map((entity) =>
-        this.createEntityProxy(entity)
-      );
-      array.push(...proxiedEntities);
-    });
+    this.invalidateTypeArrays();
+    for (const entity of this.entities.values()) {
+      const type = (entity as Entity).type;
+      if (!this.typeArrays.has(type)) {
+        this.typeArrays.set(type, []);
+      }
+      this.typeArrays.get(type)?.push(entity);
+    }
   }
 
   // Get reactive array for a specific type
@@ -474,10 +464,10 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
   }
 
   // React integration
-  subscribe = (callback: () => void): (() => void) => {
+  subscribe(callback: () => void): () => void {
     this.subscribers.add(callback);
     return () => this.subscribers.delete(callback);
-  };
+  }
 
   // Flush engine control methods
   flushNow = async (): Promise<void> => {
@@ -504,62 +494,62 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
 
   private notifySubscribers(): void {
     if (this.suppressNotifications) return;
-
     if (this.isNotifying) {
-      // Queue notifications to avoid reentrancy issues
       this.notificationQueue.push(() => this.notifySubscribers());
       return;
     }
 
     this.isNotifying = true;
     try {
-      this.subscribers.forEach((callback) => {
-        try {
-          callback();
-        } catch (error) {
-          // Isolate subscriber errors - don't let one bad subscriber crash everything
-          console.warn("Subscriber error:", error);
-        }
-      });
-
-      // Process any queued notifications
-      while (this.notificationQueue.length > 0) {
-        const queuedNotification = this.notificationQueue.shift()!;
-        this.isNotifying = false; // Allow the queued notification to run
-        queuedNotification();
-        this.isNotifying = true; // Reset flag for next iteration
-      }
+      this.subscribers.forEach((callback) => callback());
     } finally {
       this.isNotifying = false;
+      const nextNotification = this.notificationQueue.shift();
+      if (nextNotification) nextNotification();
     }
+  }
+
+  upsert(id: EntityId, entity: InferOutput<TSchema>): void {
+    this.entities.set(id, entity);
+    this.notifySubscribers();
+  }
+
+  getById(id: EntityId): InferOutput<TSchema> | undefined {
+    return this.entities.get(id);
+  }
+
+  getAll(): InferOutput<TSchema>[] {
+    return Array.from(this.entities.values());
+  }
+
+  delete(id: EntityId): void {
+    this.entities.delete(id);
+    this.notifySubscribers();
   }
 }
 
-// Export a Proxy-wrapped store that provides dynamic array access
-export function KalphiteStore<TSchema extends StandardSchemaV1 = any>(
-  schema?: TSchema,
-  config: KalphiteConfig = {}
-): KalphiteStoreImpl<TSchema> & Record<string, any[]> {
-  const store = new KalphiteStoreImpl(schema, config);
+class ProxiedKalphiteStore<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1
+> extends KalphiteStore<TSchema> {
+  constructor(schema?: TSchema, config: KalphiteConfig = {}) {
+    super(schema, config);
+  }
 
+  getTypeArray(type: string): InferOutput<TSchema>[] {
+    return super.getTypeArray(type);
+  }
+}
+
+export function createKalphiteStore<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1
+>(schema?: TSchema, config: KalphiteConfig = {}): KalphiteStoreType<TSchema> {
+  const store = new ProxiedKalphiteStore(schema, config);
   return new Proxy(store, {
     get(target, prop) {
-      // If it's a known method/property, return it
-      if (prop in target || typeof prop === "symbol") {
-        return (target as any)[prop];
+      if (typeof prop === "string" && !(prop in target)) {
+        return target.getTypeArray(prop);
       }
-
-      // If it's a string property (entity type), return a reactive array
-      if (typeof prop === "string") {
-        // Convert singular to plural for common types
-        let type = prop;
-        if (prop.endsWith("s")) {
-          type = prop.slice(0, -1); // "comments" -> "comment"
-        }
-        return target.getTypeArray(type);
-      }
-
-      return undefined;
+      return (target as any)[prop];
     },
-  }) as KalphiteStoreImpl<TSchema> & Record<string, any[]>;
+  }) as KalphiteStoreType<TSchema>;
 }
