@@ -48,12 +48,14 @@ pnpm run todo complete 1
 - Offline-first architecture
 - Data migration support
 
-### 🔮 Layer 4 (Network Sync) - PLANNED
+### 🔮 Layer 4 (Network Sync) - IN PROGRESS
 
-- WebSocket real-time sync
-- Conflict resolution
+- Operation-based sync with WebSocket notifications
+- Optimistic updates with conflict resolution
 - Multi-device synchronization
 - Collaborative editing
+- Offline operation queuing
+- State synchronization
 
 ## 🏗️ Architecture
 
@@ -115,6 +117,7 @@ Our tests validate these performance characteristics:
 4. **Performance Testing** - Scale validation
 5. **Demo Integration** - Real usage patterns
 6. **Memory-First Validation** - Synchronous operation verification
+7. **Operation Sync** - WebSocket and HTTP sync testing
 
 ### Example Test
 
@@ -249,12 +252,20 @@ const results = await todoStore.query`
 ### Layer 4: Network Sync
 
 ```typescript
-// Will add real-time collaboration
-todoStore.enableSync({
-  url: "ws://localhost:3001",
-  userId: "user123",
-  autoReconnect: true,
+// Operation-based sync with WebSocket notifications
+const syncEngine = new OperationSyncEngine({
+  wsUrl: "wss://api.example.com/sync",
+  httpUrl: "https://api.example.com/sync",
+  roomId: "todo-room",
+  userId: "user-123",
 });
+
+// Enable sync
+todoStore.enableSync(syncEngine);
+
+// Operations are now synced across devices
+const todo = createTodo(generateId(), "New task");
+todoStore.todo.upsert(todo.id, todo); // ✅ Synced immediately
 ```
 
 ## 🤝 Contributing
