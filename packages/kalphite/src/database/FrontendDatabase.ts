@@ -235,6 +235,9 @@ export class FrontendDatabase {
   async delete(type: string, id: EntityId): Promise<void> {
     await this.ensureTableExists(type);
 
+    // Simple cascade delete: find entities that reference this entity
+    await this.cascadeDelete(type, id);
+
     if (this.__config.dbName?.startsWith("memory://")) {
       const typeStorage = this.memoryStorage.get(type);
       if (typeStorage) {
@@ -248,6 +251,27 @@ export class FrontendDatabase {
     }
 
     await this.pool.query(`DELETE FROM ${type} WHERE id = $1`, [id]);
+  }
+
+  private async cascadeDelete(type: string, id: EntityId): Promise<void> {
+    // Find entities that reference this entity and delete them too
+    // This is a simple implementation - in production you'd want more sophisticated referential integrity
+
+    for (const tableName of this.tables) {
+      if (tableName === type) continue; // Skip the same table
+
+      const entities = await this.getByType(tableName);
+      const referencingEntities = entities.filter((entity) => {
+        // Look for references in the data object
+        const dataStr = JSON.stringify(entity.data);
+        return dataStr.includes(`"${id}"`); // Simple string search for the ID
+      });
+
+      // Delete referencing entities
+      for (const entity of referencingEntities) {
+        await this.delete(entity.type, entity.id);
+      }
+    }
   }
 
   async bulkDelete(type: string, ids: EntityId[]): Promise<void> {

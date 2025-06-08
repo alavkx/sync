@@ -501,7 +501,14 @@ export class KalphiteStore<
 
     this.isNotifying = true;
     try {
-      this.subscribers.forEach((callback) => callback());
+      this.subscribers.forEach((callback) => {
+        try {
+          callback();
+        } catch (error) {
+          // Gracefully handle subscriber errors without stopping other subscribers
+          console.error("Subscriber error:", error);
+        }
+      });
     } finally {
       this.isNotifying = false;
       const nextNotification = this.notificationQueue.shift();
@@ -547,7 +554,9 @@ export function createKalphiteStore<
   return new Proxy(store, {
     get(target, prop) {
       if (typeof prop === "string" && !(prop in target)) {
-        return target.getTypeArray(prop);
+        // Handle plural forms by removing 's' suffix if it exists
+        const singularProp = prop.endsWith("s") ? prop.slice(0, -1) : prop;
+        return target.getTypeArray(singularProp);
       }
       return (target as any)[prop];
     },

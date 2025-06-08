@@ -74,7 +74,11 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
 
     if (this.isOnline()) {
       this.batchedOperations.push(operation);
-      if (this.batchedOperations.length >= this.batchSize) {
+      // Send immediately for responsiveness, but still batch if multiple operations come quickly
+      if (
+        this.batchedOperations.length >= this.batchSize ||
+        !this.batchTimeout
+      ) {
         await this.flushBatchedOperations();
       } else {
         this.scheduleBatchSend();
@@ -248,6 +252,25 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
 
   async flush(): Promise<void> {
     await this.flushBatchedOperations();
+
+    // Process queued operations when coming back online
+    if (this.isOnline() && this.operationQueue.length > 0) {
+      const queuedOperations = [...this.operationQueue];
+      this.operationQueue = [];
+
+      // Send queued operations in batches
+      for (let i = 0; i < queuedOperations.length; i += this.batchSize) {
+        const batch = queuedOperations.slice(i, i + this.batchSize);
+        try {
+          await this.pushOperations(batch);
+        } catch (error) {
+          // Re-queue failed operations
+          batch.forEach((op) => this.addToQueue(op));
+          throw error;
+        }
+      }
+    }
+
     await this.syncState();
   }
 

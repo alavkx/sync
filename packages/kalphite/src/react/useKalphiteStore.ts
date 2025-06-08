@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { KalphiteStoreType } from "../store/KalphiteStore";
 
 // Global store instance - will be set during initialization
@@ -8,5 +9,13 @@ export function setGlobalStore(store: KalphiteStoreType<any>): void {
 }
 
 export function useKalphiteStore(): KalphiteStoreType<any> | null {
-  return globalStore;
+  const [store, setStore] = useState<KalphiteStoreType<any> | null>(
+    globalStore
+  );
+
+  useEffect(() => {
+    setStore(globalStore);
+  }, []);
+
+  return store;
 }

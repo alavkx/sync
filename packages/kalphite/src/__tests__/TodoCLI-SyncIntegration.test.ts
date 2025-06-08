@@ -127,6 +127,14 @@ describe("Todo CLI: Sync Integration", () => {
     // Inject mock HTTP client
     (syncEngine as any).httpClient = mockHttpClient;
 
+    // Add default mock response for state sync endpoint
+    mockHttpClient.setResponse("/sync/state", {
+      stateVersion: "v1",
+      syncTimestamp: Date.now(),
+      entities: [],
+      deletedEntityIds: [],
+    });
+
     vi.clearAllMocks();
   });
 
