@@ -7,6 +7,7 @@ import {
   useEntity,
   useKalphiteStore,
 } from "../react";
+import { useQuery } from "../react/useQuery";
 import { createKalphiteStore } from "../store/KalphiteStore";
 
 // Test schema for Layer 5 tests
@@ -269,11 +270,98 @@ describe("Layer 5: React Integration", () => {
   });
 
   describe("Query Integration", () => {
-    test.todo("should provide useQuery hook for filtered collections");
-    test.todo("should re-render when query results change");
-    test.todo("should optimize query re-execution");
-    test.todo("should handle dynamic query parameters");
-    test.todo("should support sorting and limiting");
+    test("should provide useQuery hook for filtered collections", () => {
+      act(() => {
+        store.test.push(createTestEntity("1", "Alice"));
+        store.test.push(createTestEntity("2", "Bob"));
+        store.test.push(createTestEntity("3", "Charlie"));
+      });
+
+      const { result } = renderHook(() =>
+        useQuery<TestEntity>("test", {
+          where: (entity: TestEntity) => entity.data.name.startsWith("A"),
+        })
+      );
+
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].data.name).toBe("Alice");
+    });
+
+    test("should re-render when query results change", () => {
+      const { result } = renderHook(() =>
+        useQuery<TestEntity>("test", {
+          where: (entity: TestEntity) => entity.data.name.includes("test"),
+        })
+      );
+
+      expect(result.current).toHaveLength(0);
+
+      act(() => {
+        store.test.push(createTestEntity("1", "test entity"));
+      });
+
+      expect(result.current).toHaveLength(1);
+    });
+
+    test("should optimize query re-execution", () => {
+      act(() => {
+        store.test.push(createTestEntity("1", "Alice"));
+        store.test.push(createTestEntity("2", "Bob"));
+      });
+
+      const { result } = renderHook(() =>
+        useQuery<TestEntity>("test", {
+          where: (entity: TestEntity) => entity.data.name === "Alice",
+        })
+      );
+
+      expect(result.current).toHaveLength(1);
+    });
+
+    test("should handle dynamic query parameters", () => {
+      act(() => {
+        store.test.push(createTestEntity("1", "Alice"));
+        store.test.push(createTestEntity("2", "Bob"));
+      });
+
+      const { result, rerender } = renderHook(
+        ({ searchTerm }) =>
+          useQuery<TestEntity>("test", {
+            where: (entity: TestEntity) => entity.data.name === searchTerm,
+          }),
+        {
+          initialProps: { searchTerm: "Alice" },
+        }
+      );
+
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].data.name).toBe("Alice");
+
+      rerender({ searchTerm: "Bob" });
+
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].data.name).toBe("Bob");
+    });
+
+    test("should support sorting and limiting", () => {
+      act(() => {
+        store.test.push(createTestEntity("3", "Charlie"));
+        store.test.push(createTestEntity("1", "Alice"));
+        store.test.push(createTestEntity("2", "Bob"));
+      });
+
+      const { result } = renderHook(() =>
+        useQuery<TestEntity>("test", {
+          sortBy: (a: TestEntity, b: TestEntity) =>
+            a.data.name.localeCompare(b.data.name),
+          limit: 2,
+        })
+      );
+
+      expect(result.current).toHaveLength(2);
+      expect(result.current[0].data.name).toBe("Alice");
+      expect(result.current[1].data.name).toBe("Bob");
+    });
   });
 
   describe("Performance Optimizations", () => {
