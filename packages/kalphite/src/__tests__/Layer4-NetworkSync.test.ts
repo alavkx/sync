@@ -314,8 +314,123 @@ describe("Layer 4: Network Sync", () => {
       expect(sortedByTime[2].entity.message).toBe("Second");
     });
 
-    test.todo("sync engine handles concurrent edits correctly");
-    test.todo("sync engine preserves user intent during merges");
+    test.skip("should handle concurrent edits correctly", async () => {
+      const conflictResolutions: any[] = [];
+      syncEngine.on("conflictResolved", (resolution: any) => {
+        conflictResolutions.push(resolution);
+      });
+
+      // Simulate concurrent edits on the same entity
+      const baseEntity = { message: "Original text", priority: "medium" };
+
+      // Local edit: change message
+      const localEdit: SyncChange = {
+        type: "upsert",
+        entityType: "comment",
+        entityId: "c1",
+        entity: { ...baseEntity, message: "Local edit" },
+        timestamp: Date.now(),
+        userId: "user-1",
+        operationId: "local-op-1",
+      };
+
+      // Remote edit: change priority (concurrent)
+      const remoteEdit: SyncChange = {
+        type: "upsert",
+        entityType: "comment",
+        entityId: "c1",
+        entity: { ...baseEntity, priority: "high" },
+        timestamp: Date.now() + 50, // Slightly later
+        userId: "user-2",
+        operationId: "remote-op-1",
+      };
+
+      // Apply local edit first
+      await syncEngine.sendChange({
+        type: localEdit.type,
+        entityType: localEdit.entityType,
+        entityId: localEdit.entityId,
+        entity: localEdit.entity,
+      });
+
+      // Receive conflicting remote edit
+      await syncEngine.simulateRemoteChange(remoteEdit);
+
+      // Should resolve conflict automatically using operational transforms
+      expect(conflictResolutions).toHaveLength(1);
+      const resolution = conflictResolutions[0];
+
+      // Merged entity should preserve both changes
+      expect(resolution.mergedEntity.message).toBe("Local edit"); // Local change preserved
+      expect(resolution.mergedEntity.priority).toBe("high"); // Remote change preserved
+      expect(resolution.strategy).toBe("operational_transform");
+    });
+
+    test.skip("should preserve user intent during merges", async () => {
+      const mergedEntities: any[] = [];
+      syncEngine.on("entityMerged", (merged: any) => {
+        mergedEntities.push(merged);
+      });
+
+      // Complex concurrent edits scenario
+      const operations = [
+        {
+          type: "upsert" as const,
+          entityType: "document",
+          entityId: "doc1",
+          entity: {
+            title: "Meeting Notes",
+            content: "1. Discuss project\n2. Review timeline",
+            lastModified: Date.now(),
+            author: "alice",
+          },
+          timestamp: 1000,
+          userId: "alice",
+          operationId: "op-1",
+        },
+        {
+          type: "upsert" as const,
+          entityType: "document",
+          entityId: "doc1",
+          entity: {
+            title: "Meeting Notes - Updated", // Alice changes title
+            content: "1. Discuss project\n2. Review timeline",
+            lastModified: Date.now() + 100,
+            author: "alice",
+          },
+          timestamp: 1100,
+          userId: "alice",
+          operationId: "op-2",
+        },
+        {
+          type: "upsert" as const,
+          entityType: "document",
+          entityId: "doc1",
+          entity: {
+            title: "Meeting Notes",
+            content: "1. Discuss project\n2. Review timeline\n3. Assign tasks", // Bob adds content
+            lastModified: Date.now() + 50,
+            author: "bob",
+          },
+          timestamp: 1050, // Concurrent with Alice's edit
+          userId: "bob",
+          operationId: "op-3",
+        },
+      ];
+
+      // Process operations and expect intelligent merging
+      for (const op of operations) {
+        await syncEngine.simulateRemoteChange(op);
+      }
+
+      expect(mergedEntities).toHaveLength(1);
+      const merged = mergedEntities[0];
+
+      // Should preserve both users' intents
+      expect(merged.title).toBe("Meeting Notes - Updated"); // Alice's title change
+      expect(merged.content).toContain("3. Assign tasks"); // Bob's content addition
+      expect(merged.lastModified).toBeGreaterThan(1100); // Reflects final merge time
+    });
   });
 
   describe("Offline/Online Handling", () => {
@@ -593,8 +708,129 @@ describe("Layer 4: Network Sync", () => {
       expect(receivedChanges[1].entity.message).toBe("Comment from user-2");
     });
 
-    test.todo("sync engine handles user authentication");
-    test.todo("sync engine maintains secure connections");
+    test.skip("should handle user authentication", async () => {
+      const authEvents: any[] = [];
+      syncEngine.on("authRequired", (event: any) => authEvents.push(event));
+      syncEngine.on("authSuccess", (event: any) => authEvents.push(event));
+      syncEngine.on("authFailure", (event: any) => authEvents.push(event));
+
+      // Test authentication flow
+      const authConfig: NetworkSyncConfig = {
+        wsUrl: "ws://localhost:3001",
+        roomId: "test-room",
+        userId: "test-user",
+        authToken: "valid-jwt-token-here",
+      };
+
+      const authenticatedEngine = new NetworkSyncEngine(authConfig);
+
+      // Mock WebSocket with auth challenge
+      const mockAuthWS = {
+        send: (message: string) => {
+          const parsed = JSON.parse(message);
+          if (parsed.type === "auth") {
+            // Simulate server auth response
+            setTimeout(() => {
+              (authenticatedEngine as any).handleMessage({
+                type: "auth-success",
+                data: {
+                  userId: "test-user",
+                  permissions: ["read", "write"],
+                  sessionId: "session-123",
+                },
+              });
+            }, 10);
+          }
+        },
+        close: () => {},
+      };
+
+      (authenticatedEngine as any).ws = mockAuthWS;
+      (authenticatedEngine as any).isConnected = true;
+
+      // Should automatically send auth message on connection
+      await authenticatedEngine.sendChange({
+        type: "upsert",
+        entityType: "comment",
+        entityId: "c1",
+        entity: { message: "Authenticated message" },
+      });
+
+      // Wait for auth flow
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(authEvents.some((e) => e.type === "auth-success")).toBe(true);
+      await authenticatedEngine.disconnect();
+    });
+
+    test.skip("should maintain secure connections", async () => {
+      const securityEvents: any[] = [];
+      syncEngine.on("securityViolation", (event: any) =>
+        securityEvents.push(event)
+      );
+      syncEngine.on("connectionSecured", (event: any) =>
+        securityEvents.push(event)
+      );
+
+      // Test secure connection features
+      const secureConfig: NetworkSyncConfig = {
+        wsUrl: "wss://secure.example.com", // WSS for TLS
+        roomId: "secure-room",
+        userId: "secure-user",
+        authToken: "secure-token",
+      };
+
+      const secureEngine = new NetworkSyncEngine(secureConfig);
+
+      // Mock secure WebSocket
+      const mockSecureWS = {
+        readyState: 1, // OPEN
+        protocol: "wss",
+        url: "wss://secure.example.com",
+        send: (message: string) => {
+          const parsed = JSON.parse(message);
+
+          // Verify message encryption/signing
+          expect(parsed.data).toBeDefined();
+          expect(parsed.timestamp).toBeDefined();
+          expect(parsed.signature).toBeDefined(); // Should have cryptographic signature
+        },
+        close: () => {},
+      };
+
+      (secureEngine as any).ws = mockSecureWS;
+      (secureEngine as any).isConnected = true;
+
+      // Send secure message
+      await secureEngine.sendChange({
+        type: "upsert",
+        entityType: "sensitive-data",
+        entityId: "secret-1",
+        entity: { content: "Confidential information" },
+      });
+
+      // Simulate receiving tampered message
+      (secureEngine as any).handleMessage({
+        type: "sync-change",
+        data: {
+          type: "upsert",
+          entityType: "comment",
+          entityId: "c1",
+          entity: { message: "Tampered message" },
+          timestamp: Date.now(),
+          userId: "attacker",
+          operationId: "malicious-op",
+          signature: "invalid-signature",
+        },
+      });
+
+      // Should detect security violation
+      expect(securityEvents.some((e) => e.type === "securityViolation")).toBe(
+        true
+      );
+
+      await secureEngine.disconnect();
+    });
   });
 
   // Demonstration test showing how Layer 4 should work
