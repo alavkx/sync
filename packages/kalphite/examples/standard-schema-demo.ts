@@ -46,7 +46,7 @@ console.log("\n🔸 Custom Standard Schema Implementation");
 
 const customUserSchema = {
   "~standard": {
-    version: 1,
+    version: 1 as const,
     vendor: "custom-validator",
     validate: (data: any) => {
       if (!data.id || typeof data.id !== "string") {
@@ -82,7 +82,8 @@ customStore.upsert("user4", {
   email: "alice@example.com",
 });
 
-console.log("  User created:", customStore.getById("user4")?.name);
+const user4 = customStore.getById("user4");
+console.log("  User created:", user4 ? (user4 as any).name : null);
 
 // =====================================================
 // SUMMARY

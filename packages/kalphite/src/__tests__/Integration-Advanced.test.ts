@@ -121,7 +121,12 @@ describe("Integration: Advanced Patterns", () => {
             lineNumber: j,
             metadata: Array.from({ length: 100 }, (_, k) => `data-${k}`),
           };
-          return { id: `large-${i}-${j}`, type: "comment", data: largeData };
+          return {
+            id: `large-${i}-${j}`,
+            type: "comment",
+            data: largeData,
+            updatedAt: Date.now(),
+          };
         });
 
         largeDataSets.push(...largeEntities);
@@ -222,11 +227,12 @@ describe("Integration: Advanced Patterns", () => {
     });
 
     test("should handle multi-file project synchronization", () => {
-      const fileStates = {
-        "App.tsx": [],
-        "utils.ts": [],
-        "types.ts": [],
-      };
+      // File states tracking (for demonstration)
+      // const fileStates = {
+      //   "App.tsx": [],
+      //   "utils.ts": [],
+      //   "types.ts": [],
+      // };
 
       // Simulate multi-file comment tracking
       const multiFileComments = [
@@ -643,6 +649,7 @@ describe("Integration: Advanced Patterns", () => {
           data: {
             value: i,
           },
+          updatedAt: Date.now(),
         });
       }
 

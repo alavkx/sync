@@ -190,7 +190,7 @@ describe("Real-World Example: Todo CLI Application", () => {
         low: 1,
       } as const;
 
-      const todos = store.todo.sort((a, b) => {
+      const todos = store.todo.sort((a: any, b: any) => {
         const priorityA = a.data.priority as keyof typeof priorityOrder;
         const priorityB = b.data.priority as keyof typeof priorityOrder;
         return priorityOrder[priorityB] - priorityOrder[priorityA];
@@ -487,8 +487,8 @@ describe("Real-World Example: Todo CLI Application", () => {
       const highPriorityIncomplete = store.todo.filter(
         (t: any) => t.data.priority === "high" && !t.data.completed
       );
-      const recentProjects = store.project.slice(0, 5);
-      const popularTags = store.tag.slice(0, 10);
+      const _recentProjects = store.project.slice(0, 5);
+      const _popularTags = store.tag.slice(0, 10);
 
       const queryTime = performance.now() - queryStart;
 

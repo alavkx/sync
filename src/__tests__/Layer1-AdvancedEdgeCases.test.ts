@@ -3,13 +3,13 @@ import {
   createCommentEntity,
   createReviewEntity,
 } from "../../packages/kalphite/src/__tests__/setup";
-import { KalphiteStore } from "../../packages/kalphite/src/store/KalphiteStore";
+import { createKalphiteStore } from "../../packages/kalphite/src/store/KalphiteStore";
 
 describe("Layer 1: Advanced Edge Cases & Stress Testing", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   describe("Entity Relationship Complexity", () => {
@@ -326,7 +326,7 @@ describe("Layer 1: Advanced Edge Cases & Stress Testing", () => {
     test("handles complex filtering with mixed data types", () => {
       const entities = [
         createCommentEntity("c1", "Test", 1),
-        createCommentEntity("c2", "Test", null), // Null score
+        createCommentEntity("c2", "Test", undefined), // Null score
         createCommentEntity("c3", "Test", undefined), // Undefined score
       ];
 

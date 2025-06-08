@@ -62,7 +62,7 @@ const commands = {
   },
 
   // Add new todo
-  add: (title: string, ...options: string[]) => {
+  add: (title: string, ..._options: string[]) => {
     if (!title) {
       console.log("❌ Please provide a todo title");
       return;
@@ -245,7 +245,9 @@ const commands = {
   // Show statistics
   stats: () => {
     const stats = getStoreStats();
-    const todos = todoStore.todo;
+    const todos = todoStore.todo.filter(
+      (entity): entity is Todo => entity.type === "todo"
+    );
 
     const byStatus = {
       pending: todos.filter((t) => t.data.status === "pending").length,
@@ -262,8 +264,6 @@ const commands = {
     console.log(`Total entities: ${stats.total}`);
     console.log(`Todos: ${stats.todos}`);
     console.log(`Projects: ${stats.projects}`);
-    console.log(`Tags: ${stats.tags}`);
-    console.log(`Users: ${stats.users}`);
     console.log(`Comments: ${stats.comments}`);
     console.log("\n📝 Todo Status");
     console.log("─".repeat(20));

@@ -218,9 +218,8 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
   describe("Integration with KalphiteStore", () => {
     test("store integrates with flush engine on mutations", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const { KalphiteStore } = await import("../store/KalphiteStore");
 
-      const store = KalphiteStore(undefined, {
+      const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
       });
 
@@ -244,7 +243,6 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
     });
 
     test("store provides flush control methods", async () => {
-      const { KalphiteStore } = await import("../store/KalphiteStore");
       const store = createKalphiteStore();
 
       // Should expose flush control methods
@@ -256,9 +254,8 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
 
     test("store flush engine tracks entity updates", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const { KalphiteStore } = await import("../store/KalphiteStore");
 
-      const store = KalphiteStore(undefined, {
+      const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({
           flushTarget: mockFlushTarget,
           debounceMs: 50,
@@ -295,9 +292,8 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
 
     test("store flush engine tracks entity deletions", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const { KalphiteStore } = await import("../store/KalphiteStore");
 
-      const store = KalphiteStore(undefined, {
+      const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
       });
 
@@ -326,9 +322,8 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
 
     test("store flush control methods work correctly", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const { KalphiteStore } = await import("../store/KalphiteStore");
 
-      const store = KalphiteStore(undefined, {
+      const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({
           flushTarget: mockFlushTarget,
           debounceMs: 200,
@@ -356,7 +351,8 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
     });
 
     test("should flush entities when batch size is reached", async () => {
-      const store = createKalphiteStore(undefined, {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+      const _store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
       });
 
@@ -364,15 +360,17 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
     });
 
     test("should handle flush errors gracefully", async () => {
-      const store = createKalphiteStore();
+      const _store = createKalphiteStore();
       // ... rest of test
     });
 
     test("should batch multiple operations efficiently", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
       const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({
-          batchSize: 3,
-          flushDelay: 50,
+          flushTarget: mockFlushTarget,
+          maxBatchSize: 3,
+          debounceMs: 50,
         }),
       });
 
@@ -380,6 +378,7 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
     });
 
     test("should handle concurrent operations", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
       const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
       });
@@ -388,10 +387,12 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
     });
 
     test("should respect flush delay", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
       const store = createKalphiteStore(undefined, {
         flushEngine: new MemoryFlushEngine({
-          batchSize: 5,
-          flushDelay: 100,
+          flushTarget: mockFlushTarget,
+          maxBatchSize: 5,
+          debounceMs: 100,
         }),
       });
 
@@ -508,7 +509,7 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
   describe("Advanced Error Scenarios", () => {
     test("handles partial batch failures", async () => {
       let callCount = 0;
-      const mockFlushTarget = vi.fn().mockImplementation(async (changes) => {
+      const mockFlushTarget = vi.fn().mockImplementation(async (_changes) => {
         callCount++;
         if (callCount === 1) {
           throw new Error("Partial failure");

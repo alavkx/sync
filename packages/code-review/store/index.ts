@@ -1,13 +1,8 @@
-import { initializeStore } from "@kalphite/sync-engine";
-import { EntitySchema } from "../code-review/schema";
+import { createKalphiteStore } from "../../kalphite/src/store/KalphiteStore";
 
 // Initialize the Kalphite store with our schema
 export async function setupStore() {
-  const store = await initializeStore(EntitySchema, {
-    enableDevtools: true,
-    logLevel: "debug",
-  });
-
+  const store = createKalphiteStore();
   return store;
 }
 

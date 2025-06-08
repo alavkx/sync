@@ -3,13 +3,13 @@ import {
   createCommentEntity,
   createReviewEntity,
 } from "../../packages/kalphite/src/__tests__/setup";
-import { KalphiteStore } from "../../packages/kalphite/src/store/KalphiteStore";
+import { createKalphiteStore } from "../../packages/kalphite/src/store/KalphiteStore";
 
 describe("Layer 1: Data Consistency & Integrity", () => {
   let store: any;
 
   beforeEach(() => {
-    store = KalphiteStore();
+    store = createKalphiteStore();
   });
 
   describe("Entity Reference Integrity", () => {

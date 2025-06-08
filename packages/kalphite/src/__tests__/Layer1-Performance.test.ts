@@ -285,7 +285,7 @@ describe("Layer 1: Performance & Scalability", () => {
 
       // Operations on empty collections should be fast
       const found = store.comment.find((c: any) => c.id === "nonexistent");
-      const filtered = store.comment.filter((c: any) => true);
+      const filtered = store.comment.filter((_c: any) => true);
       const mapped = store.comment.map((c: any) => c.id);
       const sorted = [...store.comment].sort();
 
