@@ -2,23 +2,10 @@ import type { KalphiteConfig } from "../types/config";
 import type { EntityId, EntityType } from "../types/entity";
 import { TypedCollection } from "./TypedCollection";
 
-// Standard Schema integration (using conditional types for compatibility)
-type StandardSchemaV1 = {
-  "~standard": {
-    validate: (
-      input: unknown
-    ) =>
-      | { issues: any[] }
-      | { issues: undefined; value: any }
-      | Promise<{ issues: any[] } | { issues: undefined; value: any }>;
-  };
-};
+import type { StandardSchemaV1 } from "../types/StandardSchema";
 
-type InferOutput<T extends StandardSchemaV1> = T extends {
-  "~standard": { validate: (input: unknown) => any };
-}
-  ? any // Will be properly typed when Standard Schema is available
-  : never;
+// Use the official Standard Schema type inference
+type InferOutput<T extends StandardSchemaV1> = StandardSchemaV1.InferOutput<T>;
 
 class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
   public _entities = new Map<EntityId, InferOutput<TSchema>>();
@@ -40,33 +27,31 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
     };
   }
 
-  // Type-safe upsert with optional schema validation
-  upsert(entityId: EntityId, entity: unknown): void {
+  // Type-safe upsert with schema validation (memory-first: synchronous only)
+  upsert(entityId: EntityId, entity: unknown): InferOutput<TSchema> {
     if (this.schema) {
       const result = this.schema["~standard"].validate(entity);
 
-      // Handle async validation
+      // Kalphite requires synchronous validation for memory-first operations
       if (result instanceof Promise) {
-        result.then((validationResult) => {
-          if (validationResult.issues) {
-            this.log("error", "Validation failed:", validationResult.issues);
-            return;
-          }
-          this.setEntity(entityId, validationResult.value);
-        });
-        return;
+        throw new Error(
+          "Kalphite requires synchronous validation. Async schemas are not supported in memory-first operations."
+        );
       }
 
-      // Handle sync validation
+      // Handle validation failure
       if (result.issues) {
-        this.log("error", "Validation failed:", result.issues);
-        return;
+        throw new Error(`Validation failed: ${JSON.stringify(result.issues)}`);
       }
 
-      this.setEntity(entityId, result.value);
+      const validatedEntity = result.value as InferOutput<TSchema>;
+      this.setEntity(entityId, validatedEntity);
+      return validatedEntity;
     } else {
       // No schema validation - direct set
-      this.setEntity(entityId, entity as InferOutput<TSchema>);
+      const typedEntity = entity as InferOutput<TSchema>;
+      this.setEntity(entityId, typedEntity);
+      return typedEntity;
     }
   }
 

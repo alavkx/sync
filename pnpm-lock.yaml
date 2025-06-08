@@ -87,19 +87,9 @@ importers:
 
   packages/kalphite:
     dependencies:
-      react:
-        specifier: ^18.0.0 || ^19.0.0
-        version: 19.1.0
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.8
-        version: 19.1.5
-      typescript:
-        specifier: ^5.7.2
-        version: 5.8.3
-      vitest:
-        specifier: ^3.0.5
-        version: 3.1.4(@types/node@22.15.21)(jiti@2.4.2)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.2)(tsx@4.19.4)
+      zod:
+        specifier: ^3.25.56
+        version: 3.25.56
 
 packages:
 
