@@ -198,10 +198,10 @@ export class FrontendDatabase {
 }
 ```
 
-### Layer 4: Network Sync Interfaces
+### Layer 4: Network Sync Interfaces (Legacy WebSocket)
 
 ```typescript
-// src/types/sync.ts - NEEDS CREATION
+// src/types/sync.ts - EXISTING (WebSocket-based)
 export interface SyncConfig {
   wsUrl: string;
   roomId: string;
@@ -237,7 +237,7 @@ export interface ConflictResolution {
   resolver?: (local: Entity, remote: Entity) => Entity;
 }
 
-// src/sync/NetworkSyncEngine.ts - NEEDS CREATION
+// src/sync/NetworkSyncEngine.ts - EXISTING IMPLEMENTATION
 export class NetworkSyncEngine extends EventEmitter {
   private ws?: WebSocket;
   private config: Required<SyncConfig>;
@@ -279,6 +279,411 @@ export class NetworkSyncEngine extends EventEmitter {
 }
 ```
 
+## 🆕 **Layer 4 Evolution: Operation-Based Sync**
+
+### Modern Sync Interfaces (HTTP + WebSocket)
+
+```typescript
+// src/types/modern-sync.ts - NEW INTERFACES
+
+export interface ModernSyncConfig {
+  // HTTP endpoints
+  baseUrl: string; // http://api.example.com
+  operationsEndpoint?: string; // /sync/operations (default)
+  stateEndpoint?: string; // /sync/state (default)
+
+  // WebSocket notifications (optional)
+  notificationUrl?: string; // ws://api.example.com/sync/notify
+
+  // Client identification
+  clientId: string; // Unique client identifier
+  userId: string; // User identifier
+
+  // Configuration
+  authToken?: string;
+  batchSize?: number; // Default: 10
+  stateVersionKey?: string; // Default: "stateVersion"
+  offlineQueueLimit?: number; // Default: 1000
+}
+
+export interface PendingOperation {
+  name: string; // addTodo, completeTodo, updateTitle
+  args: any[]; // Operation parameters
+  id: number; // Sequential per client
+  clientId: string; // Client identification
+  timestamp: number; // When operation was created
+}
+
+export interface OperationConfirmation {
+  operationId: number; // Matches PendingOperation.id
+  clientId: string; // Client that sent operation
+  success: boolean; // Operation succeeded
+  error?: string; // Error message if failed
+  serverTimestamp: number; // Server processing time
+}
+
+export interface StateSyncRequest {
+  stateVersion?: string; // Client's current state version
+  entityTypes?: string[]; // Optional: limit sync scope
+  lastSyncTimestamp?: number; // For delta sync
+}
+
+export interface StateSyncResponse<TSchema> {
+  stateVersion: string; // New state version
+  entities: ValidatedEntity<TSchema>[]; // Full or delta entities
+  deletedEntityIds?: string[]; // Entities to remove
+  syncTimestamp: number; // Server sync time
+}
+
+export interface StatePatch {
+  stateVersion: string; // New version after patch
+  operations: ConfirmedOperation[]; // Operations that caused changes
+  entities: Entity[]; // Entities modified/added
+  deletedEntityIds: string[]; // Entities removed
+  timestamp: number; // When patch was created
+}
+
+export interface ConfirmedOperation {
+  name: string;
+  args: any[];
+  id: number;
+  clientId: string;
+  serverTimestamp: number;
+  result?: any; // Operation result if any
+}
+
+// HTTP Client abstraction
+export interface HttpClient {
+  post<TRequest, TResponse>(
+    endpoint: string,
+    data: TRequest,
+    options?: RequestOptions
+  ): Promise<TResponse>;
+
+  get<TResponse>(
+    endpoint: string,
+    options?: RequestOptions
+  ): Promise<TResponse>;
+}
+
+export interface RequestOptions {
+  timeout?: number;
+  retries?: number;
+  headers?: Record<string, string>;
+}
+
+// WebSocket notification types
+export interface NotificationMessage {
+  type:
+    | "state_changed"
+    | "operation_confirmed"
+    | "client_connected"
+    | "client_disconnected";
+  payload: any;
+  timestamp: number;
+}
+
+export interface StateChangedNotification extends NotificationMessage {
+  type: "state_changed";
+  payload: {
+    stateVersion: string;
+    affectedEntityTypes: string[];
+    triggerClientId?: string;
+  };
+}
+
+export interface OperationConfirmedNotification extends NotificationMessage {
+  type: "operation_confirmed";
+  payload: OperationConfirmation;
+}
+```
+
+### Modern Sync Engine Interface
+
+```typescript
+// src/sync/ModernSyncEngine.ts - NEW HYBRID IMPLEMENTATION
+
+export class ModernSyncEngine extends NetworkSyncEngine {
+  private httpClient: HttpClient;
+  private wsNotifications: WebSocket | null = null;
+  private currentStateVersion: string = "";
+  private pendingOperations: Map<number, PendingOperation> = new Map();
+  private operationQueue: PendingOperation[] = [];
+
+  constructor(config: ModernSyncConfig) {
+    // Initialize with backward compatibility
+    super({
+      wsUrl: config.notificationUrl || "",
+      roomId: "default",
+      userId: config.userId,
+    });
+
+    this.httpClient = new HttpClientImpl(config);
+    this.config = config;
+  }
+
+  // 🆕 NEW: Operation-based sync methods
+  async executeOperation(name: string, args: any[]): Promise<void> {
+    const operation: PendingOperation = {
+      name,
+      args,
+      id: this.generateOperationId(),
+      clientId: this.config.clientId,
+      timestamp: Date.now(),
+    };
+
+    this.pendingOperations.set(operation.id, operation);
+
+    if (this.isOnline()) {
+      await this.pushOperations([operation]);
+    } else {
+      this.operationQueue.push(operation);
+    }
+  }
+
+  async syncState(): Promise<void> {
+    const request: StateSyncRequest = {
+      stateVersion: this.currentStateVersion,
+      lastSyncTimestamp: this.lastSyncTimestamp,
+    };
+
+    const response = await this.httpClient.post<
+      StateSyncRequest,
+      StateSyncResponse<any>
+    >(this.config.stateEndpoint || "/sync/state", request);
+
+    this.applyStatePatch({
+      stateVersion: response.stateVersion,
+      operations: [], // State sync doesn't include operations
+      entities: response.entities,
+      deletedEntityIds: response.deletedEntityIds || [],
+      timestamp: response.syncTimestamp,
+    });
+
+    this.currentStateVersion = response.stateVersion;
+    this.lastSyncTimestamp = response.syncTimestamp;
+  }
+
+  private async pushOperations(operations: PendingOperation[]): Promise<void> {
+    try {
+      const response = await this.httpClient.post<
+        { operations: PendingOperation[] },
+        { confirmations: OperationConfirmation[] }
+      >(this.config.operationsEndpoint || "/sync/operations", { operations });
+
+      this.handleOperationConfirmations(response.confirmations);
+    } catch (error) {
+      // Add back to queue for retry
+      this.operationQueue.push(...operations);
+      throw error;
+    }
+  }
+
+  private handleOperationConfirmations(
+    confirmations: OperationConfirmation[]
+  ): void {
+    for (const confirmation of confirmations) {
+      const pendingOp = this.pendingOperations.get(confirmation.operationId);
+
+      if (pendingOp) {
+        this.pendingOperations.delete(confirmation.operationId);
+
+        if (confirmation.success) {
+          this.emit("operationConfirmed", {
+            ...pendingOp,
+            serverTimestamp: confirmation.serverTimestamp,
+          });
+        } else {
+          this.emit("operationFailed", {
+            operation: pendingOp,
+            error: confirmation.error,
+          });
+        }
+      }
+    }
+  }
+
+  private applyStatePatch(patch: StatePatch): void {
+    // Apply entities and deletions to store
+    for (const entity of patch.entities) {
+      this.emit("remoteChange", {
+        type: "upsert",
+        entityType: entity.type,
+        entityId: entity.id,
+        entity,
+        timestamp: patch.timestamp,
+        userId: "server",
+        operationId: `state-${patch.timestamp}`,
+      });
+    }
+
+    for (const deletedId of patch.deletedEntityIds) {
+      // Need to determine entity type from deleted ID
+      // This might require server to provide type info
+      this.emit("remoteChange", {
+        type: "delete",
+        entityType: "unknown", // TODO: Server should provide type
+        entityId: deletedId,
+        timestamp: patch.timestamp,
+        userId: "server",
+        operationId: `state-delete-${patch.timestamp}`,
+      });
+    }
+
+    this.emit("statePatch", patch);
+  }
+
+  // Enhanced WebSocket notifications
+  private setupNotifications(): void {
+    if (!this.config.notificationUrl) return;
+
+    this.wsNotifications = new WebSocket(this.config.notificationUrl);
+
+    this.wsNotifications.onmessage = (event) => {
+      const notification: NotificationMessage = JSON.parse(event.data);
+
+      switch (notification.type) {
+        case "state_changed":
+          // Pull latest state via HTTP
+          this.syncState().catch((error) => this.emit("error", error));
+          break;
+
+        case "operation_confirmed":
+          const opNotification = notification as OperationConfirmedNotification;
+          this.handleOperationConfirmations([opNotification.payload]);
+          break;
+      }
+    };
+  }
+
+  // 🔄 COMPATIBILITY: Legacy methods still work
+  async sendChange(
+    change: Omit<SyncChange, "operationId" | "timestamp" | "userId">
+  ): Promise<void> {
+    // Convert to operation
+    const operation = this.convertChangeToOperation(change);
+    return this.executeOperation(operation.name, operation.args);
+  }
+
+  private convertChangeToOperation(change: SyncChange): {
+    name: string;
+    args: any[];
+  } {
+    switch (change.type) {
+      case "upsert":
+        return {
+          name: `upsert${change.entityType}`,
+          args: [change.entityId, change.entity],
+        };
+      case "delete":
+        return {
+          name: `delete${change.entityType}`,
+          args: [change.entityId],
+        };
+    }
+  }
+
+  // New event handlers
+  onStatePatch(handler: (patch: StatePatch) => void): void {
+    this.on("statePatch", handler);
+  }
+
+  onOperationConfirmed(handler: (op: ConfirmedOperation) => void): void {
+    this.on("operationConfirmed", handler);
+  }
+
+  onOperationFailed(
+    handler: (data: { operation: PendingOperation; error: string }) => void
+  ): void {
+    this.on("operationFailed", handler);
+  }
+
+  // Status methods
+  getPendingOperations(): PendingOperation[] {
+    return Array.from(this.pendingOperations.values());
+  }
+
+  getQueuedOperations(): PendingOperation[] {
+    return [...this.operationQueue];
+  }
+
+  getCurrentStateVersion(): string {
+    return this.currentStateVersion;
+  }
+}
+```
+
+### Server Contract Specification
+
+```typescript
+// src/types/server-contract.ts - SERVER IMPLEMENTATION GUIDE
+
+export interface ServerSyncContract<TSchema> {
+  operations: {
+    endpoint: string; // POST /sync/operations
+    request: { operations: PendingOperation[] };
+    response: { confirmations: OperationConfirmation[] };
+
+    // Server should:
+    // 1. Validate each operation against schema
+    // 2. Execute operations in order
+    // 3. Update server state
+    // 4. Return confirmations
+    // 5. Notify other clients via WebSocket
+  };
+
+  state: {
+    endpoint: string; // POST /sync/state
+    request: StateSyncRequest;
+    response: StateSyncResponse<TSchema>;
+
+    // Server should:
+    // 1. Compare client stateVersion with current
+    // 2. Return delta or full state as needed
+    // 3. Include new stateVersion
+    // 4. Optionally support entity type filtering
+  };
+
+  notifications: {
+    transport: "websocket" | "sse"; // Real-time hints
+    endpoint: string; // ws://host/sync/notify
+
+    // Server should send:
+    // - state_changed when any client modifies state
+    // - operation_confirmed for async operation results
+    // - client_connected/disconnected for presence
+  };
+}
+
+// Validation utilities (framework agnostic)
+export interface SyncValidator<TSchema> {
+  validateOperation(raw: unknown): Result<ValidatedOperation<TSchema>>;
+  validateStateData(raw: unknown): Result<ValidatedEntity<TSchema>>;
+
+  // Generic middleware pattern (not framework-specific)
+  createMiddleware(): (req: any, res: any, next: any) => void;
+}
+
+export type Result<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+export interface ValidatedOperation<TSchema> {
+  name: string;
+  args: any[];
+  schema: TSchema;
+  isValid: boolean;
+}
+
+export interface ValidatedEntity<TSchema> {
+  id: string;
+  type: string;
+  data: any;
+  schema: TSchema;
+  isValid: boolean;
+}
+```
+
 ## Implementation Priority & Dependencies
 
 ### Phase 1: Complete Layer 1 (Essential)
@@ -299,11 +704,18 @@ export class NetworkSyncEngine extends EventEmitter {
 2. **Schema migration** - Handle schema evolution
 3. **Query optimization** - Performance at scale
 
-### Phase 4: Build Layer 4 (Future)
+### Phase 4A: Maintain Layer 4 Legacy (Existing)
 
-1. **WebSocket sync** - Real-time collaboration
-2. **Conflict resolution** - Multi-user editing
-3. **Offline support** - Robust connectivity handling
+1. **WebSocket sync** - Keep existing real-time collaboration
+2. **Conflict resolution** - Maintain multi-user editing
+3. **Offline support** - Preserve robust connectivity handling
+
+### Phase 4B: Evolve Layer 4 Modern (New)
+
+1. **HTTP client implementation** - HTTP-first sync pattern
+2. **Operation-based sync** - Named operations with args
+3. **Hybrid notifications** - WebSocket hints + HTTP reliability
+4. **Backward compatibility** - Legacy methods still work
 
 ## Testing Strategy
 
@@ -314,5 +726,33 @@ Each interface should have:
 - **Performance tests** - Benchmark requirements
 - **Error handling tests** - Edge cases and failures
 - **Type tests** - TypeScript compliance
+- **Migration tests** - Legacy to modern compatibility
 
 The existing test files provide specifications - they need actual implementations to make them pass.
+
+## Migration Guide
+
+### From Legacy NetworkSyncEngine to ModernSyncEngine
+
+```typescript
+// Before (still works)
+syncEngine.sendChange({
+  type: "upsert",
+  entityType: "todo",
+  entityId: "todo-1",
+  entity: { id: "todo-1", title: "Buy groceries", completed: false },
+});
+
+// After (new capabilities)
+await syncEngine.executeOperation("addTodo", ["Buy groceries"]);
+await syncEngine.executeOperation("completeTodo", ["todo-1"]);
+
+// Enhanced event handling
+syncEngine.onStatePatch((patch) => {
+  console.log(`State updated to version ${patch.stateVersion}`);
+});
+
+syncEngine.onOperationConfirmed((operation) => {
+  console.log(`Operation ${operation.name} confirmed by server`);
+});
+```
