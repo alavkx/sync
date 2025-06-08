@@ -1,11 +1,54 @@
-import { describe, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { NetworkSyncConfig, SyncChange } from "../sync/NetworkSyncEngine";
+import { NetworkSyncEngine } from "../sync/NetworkSyncEngine";
 
-// NOTE: These tests will fail until Layer 4 is implemented
-// They serve as specifications for what needs to be built
+// NOTE: Basic functionality now implemented, gradually enabling tests
 
-describe("Layer 4: Network Sync (TODO)", () => {
-  // ⏳ TODO: Implement WebSocket-based sync
-  test.todo("sync engine connects to WebSocket server");
+describe("Layer 4: Network Sync", () => {
+  let syncEngine: NetworkSyncEngine;
+  const mockConfig: NetworkSyncConfig = {
+    wsUrl: "ws://localhost:3001",
+    roomId: "test-room",
+    userId: "test-user-1",
+  };
+
+  beforeEach(() => {
+    syncEngine = new NetworkSyncEngine(mockConfig);
+  });
+
+  afterEach(async () => {
+    if (syncEngine) {
+      await syncEngine.disconnect();
+    }
+  });
+
+  describe("Core Connection", () => {
+    test("should create sync engine instance", () => {
+      expect(syncEngine).toBeDefined();
+      expect(syncEngine.connected).toBe(false);
+    });
+
+    test("should handle offline operation queue", async () => {
+      expect(syncEngine.queueLength).toBe(0);
+
+      await syncEngine.sendChange({
+        type: "upsert",
+        entityType: "comment",
+        entityId: "c1",
+        entity: { message: "test" },
+      });
+
+      expect(syncEngine.queueLength).toBe(1);
+    });
+
+    // Real WebSocket tests would need a test server
+    test.skip("sync engine connects to WebSocket server", async () => {
+      await expect(syncEngine.connect()).resolves.toBeUndefined();
+      expect(syncEngine.connected).toBe(true);
+    });
+  });
+
+  // Keep existing tests as todos for now
   test.todo("sync engine sends local changes to server");
   test.todo("sync engine receives remote changes from server");
   test.todo("sync engine handles connection failures gracefully");
@@ -26,34 +69,45 @@ describe("Layer 4: Network Sync (TODO)", () => {
   test.todo("sync engine maintains secure connections");
 
   // Demonstration test showing how Layer 4 should work
-  test.skip("DEMO: how network sync should work", async () => {
-    // This test shows the intended behavior
-    // It will be implemented when NetworkSync is built
-    // const syncEngine = new NetworkSyncEngine({
-    //   wsUrl: "ws://localhost:3001",
-    //   roomId: "test-room",
-    //   userId: "user-1"
-    // });
-    // await syncEngine.connect();
-    // Local change should sync to server
-    // store.comment.upsert("c1", commentEntity);
-    // await syncEngine.flush();
-    // Remote change should arrive in store
-    // syncEngine.on("remoteChange", (change) => {
-    //   store.applyRemoteChange(change);
-    // });
-    // Simulate remote change
-    // await syncEngine.simulateRemoteChange({
-    //   type: "upsert",
-    //   entityType: "comment",
-    //   entityId: "c2",
-    //   entity: commentEntity2,
-    //   timestamp: Date.now(),
-    //   userId: "user-2"
-    // });
-    // expect(store.comment).toHaveLength(2);
-    // Clean up
-    // await syncEngine.disconnect();
+  test("DEMO: network sync engine workflow", async () => {
+    // Demonstrates core sync engine functionality
+    const syncEngine = new NetworkSyncEngine({
+      wsUrl: "ws://localhost:3001",
+      roomId: "test-room",
+      userId: "user-1",
+    });
+
+    // Test event handling
+    const receivedChanges: any[] = [];
+    syncEngine.on("remoteChange", (change: SyncChange) => {
+      receivedChanges.push(change);
+    });
+
+    // Simulate remote change (testing without real WebSocket server)
+    await syncEngine.simulateRemoteChange({
+      type: "upsert",
+      entityType: "comment",
+      entityId: "c2",
+      entity: { message: "Remote comment" },
+      timestamp: Date.now(),
+      userId: "user-2",
+      operationId: "remote-op-1",
+    });
+
+    expect(receivedChanges).toHaveLength(1);
+    expect(receivedChanges[0].entityType).toBe("comment");
+    expect(receivedChanges[0].entity.message).toBe("Remote comment");
+
+    // Test offline queuing
+    await syncEngine.sendChange({
+      type: "upsert",
+      entityType: "comment",
+      entityId: "c1",
+      entity: { message: "Local comment" },
+    });
+
+    expect(syncEngine.queueLength).toBe(1);
+    await syncEngine.disconnect();
   });
 });
 
