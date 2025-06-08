@@ -1,45 +1,17 @@
-# Kalphite Documentation
+# Documentation Hub
 
-> Memory-first sync engine with intuitive API
+## 🚀 Kalphite Sync Engine
 
-## Quick Start
+**[📖 Main Documentation](../packages/kalphite/README.md)** - Complete overview, API, and examples
 
-- **[📖 Main Documentation](./kalphite/README.md)** - Complete overview and API guide
-- **[Setup Guide](./kalphite/setup.md)** - Development setup and troubleshooting
+## Technical Details
 
-## Understanding Kalphite
-
-- **[Architecture](./kalphite/architecture.md)** - Complete technical design
-- **[Status](./kalphite/status.md)** - Current progress and roadmap
+- **[Architecture](./kalphite/architecture.md)** - System design and implementation
+- **[Testing](./kalphite/testing.md)** - TDD approach and test strategy
+- **[Development](./kalphite/setup.md)** - Getting started with development
+- **[Status](./kalphite/status.md)** - Current implementation progress
 - **[Decisions](./kalphite/decisions.md)** - Key architectural choices
 
-## Development
+## Reference
 
-- **[Testing](./kalphite/testing.md)** - Test-driven methodology
-
----
-
-## Current Status
-
-**Ready**: Local development ✅  
-**Coming**: Persistence (Layer 2) 🚧  
-**Future**: Real-time sync 📋
-
-## API Highlight
-
-```typescript
-const store = KalphiteStore(schema);
-
-// Intuitive access
-const comments = store.comment;
-const reviews = store.review;
-
-// Type-safe operations
-store.comment.upsert("id", entity);
-store.review.delete("id");
-
-// Natural queries
-const urgent = store.comment.filter((c) => c.data.priority === "high");
-```
-
-No async/await. No loading states. Just synchronous simplicity.
+- **[Glossary](./glossary.md)** - Key terms and concepts

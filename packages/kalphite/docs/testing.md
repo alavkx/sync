@@ -7,7 +7,7 @@ Kalphite uses **completion-defining tests** - when all tests pass, the sync engi
 ## Current Status
 
 - ✅ **Layer 1**: 20 tests passing (In-Memory Store complete)
-- ⏳ **Layer 2**: 11 tests planned (Memory Flush Engine)
+- ⏳ **Layer 2**: 11 tests defined, all skipped (Memory Flush Engine)
 - ⏳ **Layer 3**: Tests planned (Frontend Database)
 - ⏳ **Layer 4**: Tests planned (Network Sync)
 

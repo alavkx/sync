@@ -21,7 +21,7 @@ Key architectural choices and why we made them.
 
 **Why**: Tests define desired API before implementation. Our revolutionary API came from a failing test.
 
-**Result**: 31 tests provide rock-solid foundation, all docs validated
+**Result**: 20 tests provide rock-solid foundation, all docs validated
 
 ## AD003: Four-Layer Architecture ✅
 
