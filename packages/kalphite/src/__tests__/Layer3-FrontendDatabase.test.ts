@@ -269,21 +269,32 @@ describe("Layer 3: Frontend Database", () => {
 
   describe("Data Integrity and Resilience", () => {
     test("should provide backup/export functionality", async () => {
-      await db.upsert("comment", "c1", commentEntity);
-      await db.upsert("review", "r1", reviewEntity);
+      // Create a fresh database instance for complete isolation
+      const backupDb = new FrontendDatabase({
+        schema: TestEntitySchema,
+        dbName: "memory://kalphite-test-backup-" + Date.now(),
+      });
+      await backupDb.init();
 
-      const backup = await db.exportData();
-      expect(backup.entities).toHaveLength(2);
-      expect(backup.schema).toBeDefined();
-      expect(backup.timestamp).toBeDefined();
+      try {
+        await backupDb.upsert("comment", "c1", commentEntity);
+        await backupDb.upsert("review", "r1", reviewEntity);
 
-      // Clear database and restore
-      await db.clear();
-      expect(await db.getByType("comment")).toHaveLength(0);
+        const backup = await backupDb.exportData();
+        expect(backup.entities).toHaveLength(2);
+        expect(backup.schema).toBeDefined();
+        expect(backup.timestamp).toBeDefined();
 
-      await db.importData(backup);
-      expect(await db.getByType("comment")).toHaveLength(1);
-      expect(await db.getByType("review")).toHaveLength(1);
+        // Clear database and restore
+        await backupDb.clear();
+        expect(await backupDb.getByType("comment")).toHaveLength(0);
+
+        await backupDb.importData(backup);
+        expect(await backupDb.getByType("comment")).toHaveLength(1);
+        expect(await backupDb.getByType("review")).toHaveLength(1);
+      } finally {
+        await backupDb.destroy();
+      }
     });
 
     test("should handle corrupt data gracefully", async () => {
@@ -406,35 +417,45 @@ describe("Layer 3: Frontend Database", () => {
 
   // Keep the original demo test as a comprehensive integration test
   test("INTEGRATION: complete frontend database workflow", async () => {
-    // Initialize database
-    expect(db).toBeDefined();
-    expect(await db.isReady()).toBe(true);
+    // Create a fresh database instance for complete isolation
+    const integrationDb = new FrontendDatabase({
+      schema: TestEntitySchema,
+      dbName: "memory://kalphite-test-integration-" + Date.now(),
+    });
+    await integrationDb.init();
 
-    // Store entities
-    await db.upsert("comment", "c1", commentEntity);
-    await db.upsert("review", "r1", reviewEntity);
+    try {
+      // Initialize database
+      expect(integrationDb).toBeDefined();
+      expect(await integrationDb.isReady()).toBe(true);
 
-    // Query entities
-    const comments = await db.getByType("comment");
-    const reviews = await db.getByType("review");
-    const comment = await db.getById("comment", "c1");
+      // Store entities
+      await integrationDb.upsert("comment", "c1", commentEntity);
+      await integrationDb.upsert("review", "r1", reviewEntity);
 
-    expect(comments).toHaveLength(1);
-    expect(reviews).toHaveLength(1);
-    expect(comment).toEqual(commentEntity);
+      // Query entities
+      const comments = await integrationDb.getByType("comment");
+      const reviews = await integrationDb.getByType("review");
+      const comment = await integrationDb.getById("comment", "c1");
 
-    // Update entities
-    const updatedComment = {
-      ...commentEntity,
-      data: { ...commentEntity.data, message: "Updated comment" },
-      updatedAt: Date.now(),
-    };
-    await db.upsert("comment", "c1", updatedComment);
+      expect(comments).toHaveLength(1);
+      expect(reviews).toHaveLength(1);
+      expect(comment).toEqual(commentEntity);
 
-    const retrievedComment = await db.getById("comment", "c1");
-    expect(retrievedComment?.data.message).toBe("Updated comment");
+      // Update entities
+      const updatedComment = {
+        ...commentEntity,
+        data: { ...commentEntity.data, message: "Updated comment" },
+        updatedAt: Date.now(),
+      };
+      await integrationDb.upsert("comment", "c1", updatedComment);
 
-    // Clean up would be handled by afterEach
+      const retrievedComment = await integrationDb.getById("comment", "c1");
+      expect(retrievedComment?.data.message).toBe("Updated comment");
+    } finally {
+      // Ensure cleanup
+      await integrationDb.destroy();
+    }
   });
 
   it("should handle delete operations", async () => {
