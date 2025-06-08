@@ -1,4 +1,5 @@
 export interface FrontendDatabaseConfig {
-  connectionString: string;
-  schema?: Record<string, unknown>;
+  connectionString?: string;
+  dbName?: string;
+  schema?: any;
 }

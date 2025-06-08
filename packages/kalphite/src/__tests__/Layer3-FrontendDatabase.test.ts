@@ -164,28 +164,30 @@ describe("Layer 3: Frontend Database", () => {
   describe("Query Operations", () => {
     beforeEach(async () => {
       // Pre-populate test data
-      // await db.upsert("comment", "c1", commentEntity);
-      // await db.upsert("comment", "c2", {
-      //   ...commentEntity,
-      //   id: "c2",
-      //   data: { ...commentEntity.data, message: "Second comment", priority: "low" }
-      // });
-      // await db.upsert("review", "r1", reviewEntity);
+      await db.upsert("comment", "c1", commentEntity);
+      await db.upsert("comment", "c2", {
+        ...commentEntity,
+        id: "c2",
+        data: {
+          ...commentEntity.data,
+          message: "Second comment",
+          priority: "low",
+        },
+      });
+      await db.upsert("review", "r1", reviewEntity);
     });
 
-    test.skip("should query by entity type efficiently", async () => {
+    test("should query by entity type efficiently", async () => {
       const startTime = performance.now();
       const comments = await db.getByType("comment");
       const queryTime = performance.now() - startTime;
 
       expect(comments).toHaveLength(2);
       expect(queryTime).toBeLessThan(10); // Should be fast for small datasets
-      expect(comments.every((c: TestEntity) => c.type === "comment")).toBe(
-        true
-      );
+      expect(comments.every((c) => c.type === "comment")).toBe(true);
     });
 
-    test.skip("should query by entity ID efficiently", async () => {
+    test("should query by entity ID efficiently", async () => {
       const startTime = performance.now();
       const comment = await db.getById("comment", "c1");
       const queryTime = performance.now() - startTime;
@@ -194,7 +196,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(queryTime).toBeLessThan(5); // ID lookup should be very fast
     });
 
-    test.skip("should support complex queries", async () => {
+    test("should support complex queries", async () => {
       const highPriorityComments = await db.query("comment", {
         where: (entity: TestEntity) =>
           entity.type === "comment" && entity.data.priority === "high",
@@ -212,7 +214,7 @@ describe("Layer 3: Frontend Database", () => {
   });
 
   describe("Bulk Operations", () => {
-    test.skip("should handle bulk inserts and updates efficiently", async () => {
+    test("should handle bulk inserts and updates efficiently", async () => {
       const manyEntities = Array.from({ length: 100 }, (_, i) => ({
         id: `c${i}`,
         type: "comment" as const,
@@ -234,7 +236,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(allComments).toHaveLength(100);
     });
 
-    test.skip("should delete entities by ID", async () => {
+    test("should delete entities by ID", async () => {
       await db.upsert("comment", "c1", commentEntity);
       expect(await db.getById("comment", "c1")).toEqual(commentEntity);
 
@@ -393,7 +395,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(results).toHaveLength(10);
 
       // All entities should be properly stored
-      const ids = results.map((r: TestEntity) => r.id).sort();
+      const ids = results.map((r) => r.id).sort();
       const expectedIds = Array.from(
         { length: 10 },
         (_, i) => `concurrent-${i}`
@@ -436,10 +438,14 @@ describe("Layer 3: Frontend Database", () => {
   });
 
   it("should handle delete operations", async () => {
-    const db = new FrontendDatabase();
+    const db = new FrontendDatabase({
+      dbName: "memory://kalphite-test-delete-" + Date.now(),
+    });
+    await db.init();
     await db.delete("review", "r1");
     const result = await db.getById("review", "r1");
     expect(result).toBeNull();
+    await db.destroy();
   });
 });
 
