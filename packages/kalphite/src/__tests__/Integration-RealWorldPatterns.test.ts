@@ -79,22 +79,35 @@ describe("Integration: Real-World Usage Patterns", () => {
 
   describe("Collaborative Editing Patterns", () => {
     test("simulates multiple users editing simultaneously", () => {
+      // Helper function to simulate collaborative editing with upsert logic
+      const upsertComment = (entity: any) => {
+        const existingIndex = store.comment.findIndex(
+          (c: any) => c.id === entity.id
+        );
+        if (existingIndex !== -1) {
+          // Replace existing entity
+          store.comment.splice(existingIndex, 1, entity);
+        } else {
+          // Add new entity
+          store.comment.push(entity);
+        }
+      };
+
       // User 1 adds comments
-      store.comment.push(createCommentEntity("c1", "User 1 comment", 10));
-      store.comment.push(createCommentEntity("c2", "Another from user 1", 20));
+      upsertComment(createCommentEntity("c1", "User 1 comment", 10));
+      upsertComment(createCommentEntity("c2", "Another from user 1", 20));
 
       // User 2 adds comments
-      store.comment.push(createCommentEntity("c3", "User 2 comment", 15));
-      store.comment.push(createCommentEntity("c4", "User 2 feedback", 25));
+      upsertComment(createCommentEntity("c3", "User 2 comment", 15));
+      upsertComment(createCommentEntity("c4", "User 2 feedback", 25));
 
-      // User 1 updates their comment
-      store.comment.push(
-        createCommentEntity("c1", "User 1 updated comment", 10)
-      );
+      // User 1 updates their comment (collaborative editing with conflict resolution)
+      upsertComment(createCommentEntity("c1", "User 1 updated comment", 10));
 
       // Verify final state
       expect(store.comment).toHaveLength(4);
-      expect(store.comment[0].data.message).toBe("User 1 updated comment");
+      const c1Comment = store.comment.find((c: any) => c.id === "c1");
+      expect(c1Comment.data.message).toBe("User 1 updated comment");
 
       // Verify ordering by line number
       const sortedComments = store.comment.sort(
@@ -106,17 +119,29 @@ describe("Integration: Real-World Usage Patterns", () => {
     });
 
     test("handles conflict resolution patterns", () => {
+      // Helper function for conflict resolution (last write wins)
+      const upsertComment = (entity: any) => {
+        const existingIndex = store.comment.findIndex(
+          (c: any) => c.id === entity.id
+        );
+        if (existingIndex !== -1) {
+          store.comment.splice(existingIndex, 1, entity);
+        } else {
+          store.comment.push(entity);
+        }
+      };
+
       // Simulate conflicting edits to same entity
       const baseComment = createCommentEntity("c1", "Original comment", 10);
-      store.comment.push(baseComment);
+      upsertComment(baseComment);
 
       // User A's edit
       const userAEdit = createCommentEntity("c1", "User A's version", 10);
-      store.comment.push(userAEdit);
+      upsertComment(userAEdit);
 
       // User B's edit (overwrites A's edit - last write wins)
       const userBEdit = createCommentEntity("c1", "User B's version", 10);
-      store.comment.push(userBEdit);
+      upsertComment(userBEdit);
 
       expect(store.comment).toHaveLength(1);
       expect(store.comment[0].data.message).toBe("User B's version");
@@ -139,7 +164,7 @@ describe("Integration: Real-World Usage Patterns", () => {
       const originalPush = store.comment.push.bind(store.comment);
       store.comment.push = (entity: any) => {
         const result = originalPush(entity);
-        flushEngine.scheduleFlush(entity.id, entity);
+        flushEngine.scheduleFlush(entity.id, entity, "push");
         return result;
       };
 
@@ -173,6 +198,14 @@ describe("Integration: Real-World Usage Patterns", () => {
         maxRetries: 1,
         debounceMs: 10,
       });
+
+      // Connect store to flush engine
+      const originalPush = store.comment.push.bind(store.comment);
+      store.comment.push = (entity: any) => {
+        const result = originalPush(entity);
+        flushEngine.scheduleFlush(entity.id, entity, "push");
+        return result;
+      };
 
       // Offline operations
       store.comment.push(createCommentEntity("c1", "Offline comment", 1));

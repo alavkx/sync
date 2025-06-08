@@ -7,7 +7,7 @@ export interface FlushConfig<T = any> {
 }
 
 export interface FlushChange<T = any> {
-  operation: "upsert" | "delete";
+  operation: "push" | "upsert" | "delete";
   entityId: string;
   entity?: T;
   timestamp: number;
@@ -16,7 +16,11 @@ export interface FlushChange<T = any> {
 export type FlushTarget<T = any> = (changes: FlushChange<T>[]) => Promise<void>;
 
 export interface FlushEngine<T = any> {
-  scheduleFlush(entityId: string, entity: T): void;
+  scheduleFlush(
+    entityId: string,
+    entity: T,
+    operation?: "push" | "upsert"
+  ): void;
   scheduleDelete(entityId: string): void;
   getQueuedChanges(): FlushChange<T>[];
   flushNow(): Promise<void>;

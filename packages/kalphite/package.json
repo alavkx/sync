@@ -1,5 +1,12 @@
 {
-	"dependencies": {
-		"zod": "^3.25.56"
-	}
+  "name": "@kalphite/sync-engine",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.4"
+  }
 }

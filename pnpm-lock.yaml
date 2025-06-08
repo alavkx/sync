@@ -12,7 +12,7 @@ importers:
         specifier: ^5.7.2
         version: 5.8.3
 
-  packages/code-review-app:
+  packages/code-review:
     dependencies:
       '@kalphite/sync-engine':
         specifier: workspace:*
@@ -90,6 +90,10 @@ importers:
       zod:
         specifier: ^3.25.56
         version: 3.25.56
+    devDependencies:
+      vitest:
+        specifier: ^3.1.4
+        version: 3.1.4(@types/node@22.15.21)(jiti@2.4.2)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.2)(tsx@4.19.4)
 
 packages:
 

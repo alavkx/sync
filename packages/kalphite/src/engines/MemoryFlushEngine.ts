@@ -19,11 +19,15 @@ export class MemoryFlushEngine<T = any> implements FlushEngine<T> {
     this.maxBatchSize = config.maxBatchSize ?? 1000;
   }
 
-  scheduleFlush(entityId: string, entity: T): void {
+  scheduleFlush(
+    entityId: string,
+    entity: T,
+    operation: "push" | "upsert" = "upsert"
+  ): void {
     if (this.isPaused) return;
 
     this.pendingChanges.set(entityId, {
-      operation: "upsert",
+      operation,
       entityId,
       entity,
       timestamp: Date.now(),
