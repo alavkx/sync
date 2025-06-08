@@ -74,10 +74,13 @@ describe("Layer 3: Frontend Database", () => {
 
       // Verify it was inserted
       const comment = await db.getById("comment", "c1");
-      expect(comment.id).toBe(commentEntity.id);
-      expect(comment.type).toBe(commentEntity.type);
-      expect(comment.data).toEqual(commentEntity.data);
-      expect(comment.updatedAt).toBeTypeOf("number");
+      expect(comment).toBeDefined();
+      if (comment) {
+        expect(comment.id).toBe(commentEntity.id);
+        expect(comment.type).toBe(commentEntity.type);
+        expect(comment.data).toEqual(commentEntity.data);
+        expect(comment.updatedAt).toBeTypeOf("number");
+      }
     });
 
     test.skip("should load entities from PGlite on init", async () => {
