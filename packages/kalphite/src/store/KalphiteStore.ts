@@ -1,5 +1,6 @@
 import type { KalphiteConfig } from "../types/config";
 import type { EntityId } from "../types/entity";
+import type { FlushEngine } from "../types/flush";
 import type { StandardSchemaV1 } from "../types/StandardSchema";
 
 type InferOutput<T extends StandardSchemaV1> = StandardSchemaV1.InferOutput<T>;
@@ -16,6 +17,7 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
   private pushCallDepth = 0;
   private isNotifying = false;
   private notificationQueue: (() => void)[] = [];
+  private flushEngine?: FlushEngine<InferOutput<TSchema>>;
 
   constructor(schema?: TSchema, config: KalphiteConfig = {}) {
     this.schema = schema;
@@ -28,6 +30,7 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
       logLevel: "info",
       ...config,
     };
+    this.flushEngine = config.flushEngine;
   }
 
   // Create a reactive array for a specific entity type
@@ -78,6 +81,15 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
             // Update entities map if entity has id
             if (entityWithType.id) {
               this.entities.set(entityWithType.id, entityWithType);
+
+              // Schedule flush if flush engine is configured
+              if (this.flushEngine) {
+                this.flushEngine.scheduleFlush(
+                  entityWithType.id,
+                  entityWithType,
+                  "upsert"
+                );
+              }
             }
 
             // Only notify subscribers, don't invalidate arrays
@@ -153,6 +165,15 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
                     (validatedEntity as any).id,
                     validatedEntity
                   );
+
+                  // Schedule flush if flush engine is configured
+                  if (this.flushEngine) {
+                    this.flushEngine.scheduleFlush(
+                      (validatedEntity as any).id,
+                      validatedEntity,
+                      "push"
+                    );
+                  }
                 }
 
                 return this.createEntityProxy(validatedEntity);
@@ -161,6 +182,15 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
               // Update entities map if entity has id
               if (entityWithType.id) {
                 this.entities.set(entityWithType.id, entityWithType);
+
+                // Schedule flush if flush engine is configured
+                if (this.flushEngine) {
+                  this.flushEngine.scheduleFlush(
+                    entityWithType.id,
+                    entityWithType,
+                    "push"
+                  );
+                }
               }
 
               return this.createEntityProxy(entityWithType);
@@ -185,6 +215,11 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
               deleted.forEach((entity) => {
                 if (entity.id) {
                   this.entities.delete(entity.id);
+
+                  // Schedule delete in flush engine if configured
+                  if (this.flushEngine) {
+                    this.flushEngine.scheduleDelete(entity.id);
+                  }
                 }
               });
             }
@@ -439,6 +474,29 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
   subscribe = (callback: () => void): (() => void) => {
     this.subscribers.add(callback);
     return () => this.subscribers.delete(callback);
+  };
+
+  // Flush engine control methods
+  flushNow = async (): Promise<void> => {
+    if (this.flushEngine) {
+      await this.flushEngine.flushNow();
+    }
+  };
+
+  pauseFlush = (): void => {
+    if (this.flushEngine) {
+      this.flushEngine.pause();
+    }
+  };
+
+  resumeFlush = (): void => {
+    if (this.flushEngine) {
+      this.flushEngine.resume();
+    }
+  };
+
+  getQueuedChanges = () => {
+    return this.flushEngine ? this.flushEngine.getQueuedChanges() : [];
   };
 
   private notifySubscribers(): void {

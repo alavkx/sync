@@ -1,4 +1,9 @@
+import type { FlushEngine } from "./flush";
+
 export interface KalphiteConfig {
+  // Flush engine configuration
+  flushEngine?: FlushEngine<any>;
+
   // Flush timing configuration
   flushDebounceMs?: number;
   networkPushDebounceMs?: number;

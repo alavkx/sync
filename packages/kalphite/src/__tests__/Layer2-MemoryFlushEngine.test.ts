@@ -216,30 +216,344 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
 
   describe("Integration with KalphiteStore", () => {
     test("store integrates with flush engine on mutations", async () => {
-      // TODO: Integration test
-      // const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      // const store = KalphiteStore(undefined, {
-      //   flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget })
-      // });
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+      const { KalphiteStore } = await import("../store/KalphiteStore");
+
+      const store = KalphiteStore(undefined, {
+        flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
+      });
 
       const entity = createCommentEntity("c1", "Test");
-      // store.upsert("c1", entity);
+      store.comment.push(entity);
 
       vi.advanceTimersByTime(100);
 
       // Store mutation should trigger flush
-      // expect(mockFlushTarget).toHaveBeenCalledWith([
-      //   { operation: "upsert", entityId: "c1", entity }
-      // ]);
+      expect(mockFlushTarget).toHaveBeenCalledWith([
+        {
+          operation: "push",
+          entityId: "c1",
+          entity: expect.objectContaining({
+            id: "c1",
+            data: expect.objectContaining({ message: "Test" }),
+          }),
+          timestamp: expect.any(Number),
+        },
+      ]);
     });
 
-    test("store provides flush control methods", () => {
-      // TODO: Add flush control to store API
-      // const store = KalphiteStore();
-      // Should expose flush control
-      // expect(typeof store.flushNow).toBe("function");
-      // expect(typeof store.pauseFlush).toBe("function");
-      // expect(typeof store.resumeFlush).toBe("function");
+    test("store provides flush control methods", async () => {
+      const { KalphiteStore } = await import("../store/KalphiteStore");
+      const store = KalphiteStore();
+
+      // Should expose flush control methods
+      expect(typeof store.flushNow).toBe("function");
+      expect(typeof store.pauseFlush).toBe("function");
+      expect(typeof store.resumeFlush).toBe("function");
+      expect(typeof store.getQueuedChanges).toBe("function");
+    });
+
+    test("store flush engine tracks entity updates", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+      const { KalphiteStore } = await import("../store/KalphiteStore");
+
+      const store = KalphiteStore(undefined, {
+        flushEngine: new MemoryFlushEngine({
+          flushTarget: mockFlushTarget,
+          debounceMs: 50,
+        }),
+      });
+
+      // Initial entity
+      const entity1 = createCommentEntity("c1", "Original", 10);
+      store.comment.push(entity1);
+
+      // Update entity
+      const index = store.comment.findIndex((c: any) => c.id === "c1");
+      const entity2 = createCommentEntity("c1", "Updated", 20);
+      store.comment[index] = entity2;
+
+      vi.advanceTimersByTime(50);
+
+      // Should batch the operations and only flush the latest state
+      expect(mockFlushTarget).toHaveBeenCalledTimes(1);
+      expect(mockFlushTarget).toHaveBeenCalledWith([
+        {
+          operation: "upsert",
+          entityId: "c1",
+          entity: expect.objectContaining({
+            data: expect.objectContaining({
+              message: "Updated",
+              lineNumber: 20,
+            }),
+          }),
+          timestamp: expect.any(Number),
+        },
+      ]);
+    });
+
+    test("store flush engine tracks entity deletions", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+      const { KalphiteStore } = await import("../store/KalphiteStore");
+
+      const store = KalphiteStore(undefined, {
+        flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
+      });
+
+      // Add and then delete entity
+      const entity = createCommentEntity("c1", "To be deleted");
+      store.comment.push(entity);
+
+      // Reset mock to focus on delete operation
+      mockFlushTarget.mockClear();
+
+      // Delete entity
+      const index = store.comment.findIndex((c: any) => c.id === "c1");
+      store.comment.splice(index, 1);
+
+      vi.advanceTimersByTime(100);
+
+      // Should track deletion
+      expect(mockFlushTarget).toHaveBeenCalledWith([
+        {
+          operation: "delete",
+          entityId: "c1",
+          timestamp: expect.any(Number),
+        },
+      ]);
+    });
+
+    test("store flush control methods work correctly", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+      const { KalphiteStore } = await import("../store/KalphiteStore");
+
+      const store = KalphiteStore(undefined, {
+        flushEngine: new MemoryFlushEngine({
+          flushTarget: mockFlushTarget,
+          debounceMs: 200,
+        }),
+      });
+
+      const entity = createCommentEntity("c1", "Test");
+      store.comment.push(entity);
+
+      // Pause flush - should prevent automatic flushing
+      store.pauseFlush();
+      vi.advanceTimersByTime(200);
+      expect(mockFlushTarget).not.toHaveBeenCalled();
+
+      // Resume and manually flush
+      store.resumeFlush();
+      await store.flushNow();
+      expect(mockFlushTarget).toHaveBeenCalledTimes(1);
+
+      // Check queued changes
+      store.comment.push(createCommentEntity("c2", "Test2"));
+      const queuedChanges = store.getQueuedChanges();
+      expect(queuedChanges).toHaveLength(1);
+      expect(queuedChanges[0].entityId).toBe("c2");
+    });
+  });
+
+  describe("Performance & Load Testing", () => {
+    test("handles high-frequency operations efficiently", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+
+      const flushEngine = new MemoryFlushEngine({
+        flushTarget: mockFlushTarget,
+        debounceMs: 10,
+        maxBatchSize: 100,
+      });
+
+      // Schedule many rapid operations
+      for (let i = 0; i < 500; i++) {
+        flushEngine.scheduleFlush(
+          `entity-${i}`,
+          createCommentEntity(`entity-${i}`, `Message ${i}`)
+        );
+      }
+
+      // Allow multiple flush cycles to complete
+      for (let i = 0; i < 10; i++) {
+        vi.advanceTimersByTime(10);
+        await vi.runAllTimersAsync();
+      }
+
+      // Should batch operations efficiently
+      expect(mockFlushTarget).toHaveBeenCalled();
+      const totalCalls = mockFlushTarget.mock.calls.length;
+      expect(totalCalls).toBeGreaterThanOrEqual(5); // Multiple batches due to maxBatchSize
+
+      // Verify all entities are eventually flushed
+      const totalEntitiesFlushed = mockFlushTarget.mock.calls.reduce(
+        (acc, call) => acc + call[0].length,
+        0
+      );
+      expect(totalEntitiesFlushed).toBe(500);
+    });
+
+    test("respects batch size limits", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+
+      const flushEngine = new MemoryFlushEngine({
+        flushTarget: mockFlushTarget,
+        debounceMs: 10,
+        maxBatchSize: 10,
+      });
+
+      // Schedule more entities than batch size
+      for (let i = 0; i < 25; i++) {
+        flushEngine.scheduleFlush(
+          `entity-${i}`,
+          createCommentEntity(`entity-${i}`, `Message ${i}`)
+        );
+      }
+
+      // Allow multiple flush cycles to complete
+      for (let i = 0; i < 5; i++) {
+        vi.advanceTimersByTime(10);
+        await vi.runAllTimersAsync();
+      }
+
+      // Should respect batch size and make multiple calls
+      expect(mockFlushTarget).toHaveBeenCalledTimes(3); // 10 + 10 + 5
+      expect(mockFlushTarget.mock.calls[0][0]).toHaveLength(10);
+      expect(mockFlushTarget.mock.calls[1][0]).toHaveLength(10);
+      expect(mockFlushTarget.mock.calls[2][0]).toHaveLength(5);
+    });
+
+    test("maintains operation order within batches", async () => {
+      const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
+
+      const flushEngine = new MemoryFlushEngine({
+        flushTarget: mockFlushTarget,
+        debounceMs: 50,
+      });
+
+      const entityId = "test-entity";
+
+      // Schedule multiple updates to same entity
+      flushEngine.scheduleFlush(
+        entityId,
+        createCommentEntity(entityId, "Version 1")
+      );
+      flushEngine.scheduleFlush(
+        entityId,
+        createCommentEntity(entityId, "Version 2")
+      );
+      flushEngine.scheduleFlush(
+        entityId,
+        createCommentEntity(entityId, "Version 3")
+      );
+
+      vi.advanceTimersByTime(50);
+
+      // Should only flush the latest version
+      expect(mockFlushTarget).toHaveBeenCalledTimes(1);
+      expect(mockFlushTarget).toHaveBeenCalledWith([
+        expect.objectContaining({
+          entityId,
+          entity: expect.objectContaining({
+            data: expect.objectContaining({ message: "Version 3" }),
+          }),
+        }),
+      ]);
+    });
+  });
+
+  describe("Advanced Error Scenarios", () => {
+    test("handles partial batch failures", async () => {
+      let callCount = 0;
+      const mockFlushTarget = vi.fn().mockImplementation(async (changes) => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error("Partial failure");
+        }
+        return undefined;
+      });
+
+      const flushEngine = new MemoryFlushEngine({
+        flushTarget: mockFlushTarget,
+        maxRetries: 2,
+        baseRetryDelay: 10,
+      });
+
+      flushEngine.scheduleFlush("c1", createCommentEntity("c1", "Test 1"));
+      flushEngine.scheduleFlush("c2", createCommentEntity("c2", "Test 2"));
+
+      vi.advanceTimersByTime(100);
+
+      // First call should fail, data should remain queued
+      expect(callCount).toBe(1);
+      expect(flushEngine.getQueuedChanges()).toHaveLength(2);
+
+      // Manually trigger flush again to test retry behavior
+      await flushEngine.flushNow();
+
+      // Second call should succeed
+      expect(callCount).toBe(2);
+      expect(flushEngine.getQueuedChanges()).toHaveLength(0);
+    });
+
+    test("implements exponential backoff correctly", async () => {
+      let callCount = 0;
+      const callTimes: number[] = [];
+
+      const mockFlushTarget = vi.fn().mockImplementation(async () => {
+        callTimes.push(Date.now());
+        callCount++;
+        if (callCount <= 2) {
+          throw new Error("Retry needed");
+        }
+        return undefined;
+      });
+
+      const flushEngine = new MemoryFlushEngine({
+        flushTarget: mockFlushTarget,
+        maxRetries: 3,
+        baseRetryDelay: 10, // Shorter delay for testing
+      });
+
+      flushEngine.scheduleFlush("c1", createCommentEntity("c1", "Test"));
+
+      // Initial attempt should fail
+      vi.advanceTimersByTime(100);
+      expect(callCount).toBe(1);
+      expect(flushEngine.getQueuedChanges()).toHaveLength(1);
+
+      // Manually retry to test the retry mechanism
+      await flushEngine.flushNow();
+      expect(callCount).toBe(2);
+      expect(flushEngine.getQueuedChanges()).toHaveLength(1);
+
+      // Third attempt should succeed
+      await flushEngine.flushNow();
+      expect(callCount).toBe(3);
+      expect(flushEngine.getQueuedChanges()).toHaveLength(0);
+    });
+
+    test("handles flush target throwing synchronously", async () => {
+      const mockFlushTarget = vi.fn().mockImplementation(() => {
+        throw new Error("Synchronous error");
+      });
+
+      const flushEngine = new MemoryFlushEngine({
+        flushTarget: mockFlushTarget,
+        maxRetries: 1,
+        baseRetryDelay: 10,
+      });
+
+      const entity = createCommentEntity("c1", "Test");
+      flushEngine.scheduleFlush("c1", entity);
+
+      vi.advanceTimersByTime(100);
+
+      // Should handle synchronous errors gracefully
+      expect(mockFlushTarget).toHaveBeenCalled();
+
+      // Data should still be queued for retry
+      expect(flushEngine.getQueuedChanges()).toHaveLength(1);
+      expect(flushEngine.getQueuedChanges()[0].entity).toEqual(entity);
     });
   });
 });

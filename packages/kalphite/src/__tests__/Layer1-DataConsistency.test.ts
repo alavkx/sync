@@ -353,7 +353,7 @@ describe("Layer 1: Data Consistency & Integrity", () => {
       // Verify data integrity maintained
       expect(store.comment.length).toBe(20);
       expect(errorCount).toBeGreaterThan(0); // Some errors should have occurred
-      expect(notificationCount).toBe(20); // All notifications should have been attempted
+      expect(notificationCount).toBe(10); // Only the 10 entities added after subscriber was attached
 
       // All entities should be accessible
       for (let i = 0; i < 20; i++) {
