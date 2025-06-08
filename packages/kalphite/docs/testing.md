@@ -7,11 +7,14 @@ Tests are the primary specification for Kalphite's memory-first sync engine. The
 **Core Principles:**
 
 - Tests drive implementation (not the reverse)
+- Failing tests are specifications, not errors
+- Work in clear stages: plan → scaffold → prepare → implement
 - Architecture expressed through test organization
-- No code without comprehensive test coverage
 - Tests provide real-time progress visibility
 
 ## Test-Driven Workflow
+
+**Important**: Tests should fail initially—this is expected and correct. Failing tests represent specifications that will eventually pass when implementation is complete.
 
 ### 1. Planning → `test.todo()`
 
@@ -21,7 +24,7 @@ test.todo("should handle network reconnection with exponential backoff");
 
 Capture requirements and user stories before detailed design.
 
-### 2. Specification → `test.skip()`
+### 2. Scaffolding → `test.skip()`
 
 ```typescript
 test.skip("should handle network reconnection with exponential backoff", () => {
@@ -30,15 +33,17 @@ test.skip("should handle network reconnection with exponential backoff", () => {
 });
 ```
 
-Define exact API surface, behavior, performance requirements, and edge cases.
+Define exact API surface, behavior, performance requirements, and edge cases. Tests remain skipped while scaffolding.
 
-### 3. Implementation → `test()`
+### 3. Preparing to Implement → Unskip & Refactor Tests
 
-Remove `skip()` to activate tests. Implement to make tests pass using Red → Green → Refactor.
+Remove `skip()` to activate all tests for a feature area. Refactor test code as needed to ensure specifications are complete and accurate. **Tests will fail at this stage—this is correct.**
 
-### 4. Validation → All tests passing
+### 4. Implementation → Fix Failing Tests
 
-Passing suite confirms complete implementation meeting specification.
+Implement production code to make tests pass. Ideally, no test code changes are needed during this phase—only implementation code changes.
+
+**Critical**: A failing test is not incorrect. Our goal is to create failing tests that will eventually pass when we complete the implementation. Work in stages, not all at once.
 
 ## Organization Standards
 
@@ -136,10 +141,10 @@ test("should support complete workflow: create → edit → complete → archive
 
 **During Implementation:**
 
-- Tests activated one feature at a time
-- No implementation without corresponding tests
-- Performance benchmarks maintained
-- Robust error handling validated
+- Tests activated in logical groups, not individually
+- Failing tests guide implementation priorities
+- Test code changes minimal during implementation phase
+- Implementation code changes to satisfy failing specifications
 
 **Before Release:**
 
