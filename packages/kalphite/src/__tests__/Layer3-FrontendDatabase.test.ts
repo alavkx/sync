@@ -83,7 +83,7 @@ describe("Layer 3: Frontend Database", () => {
       }
     });
 
-    test.skip("should load entities from PGlite on init", async () => {
+    test("should load entities from PGlite on init", async () => {
       // Pre-populate database
       await db.upsert("comment", "c1", commentEntity);
       await db.upsert("review", "r1", reviewEntity);
@@ -106,7 +106,7 @@ describe("Layer 3: Frontend Database", () => {
       await db2.destroy();
     });
 
-    test.skip("should handle schema migrations automatically", async () => {
+    test("should handle schema migrations automatically", async () => {
       // Start with simple schema
       const simpleSchema = z.discriminatedUnion("type", [
         z.object({
@@ -143,7 +143,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(comments[0].data.lineNumber).toBeUndefined(); // Missing field handled
     });
 
-    test.skip("should create tables for new entity types", async () => {
+    test("should create tables for new entity types", async () => {
       // Initially only comment type exists
       await db.upsert("comment", "c1", commentEntity);
 
@@ -286,7 +286,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(await db.getByType("review")).toHaveLength(1);
     });
 
-    test.skip("should handle corrupt data gracefully", async () => {
+    test("should handle corrupt data gracefully", async () => {
       // Insert valid data
       await db.upsert("comment", "c1", commentEntity);
 
@@ -312,7 +312,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(newComments[0].id).toBe("c2");
     });
 
-    test.skip("should maintain referential integrity", async () => {
+    test("should maintain referential integrity", async () => {
       // This is a basic check - full referential integrity would require foreign keys
       await db.upsert("review", "r1", reviewEntity);
       await db.upsert("comment", "c1", {
@@ -340,7 +340,7 @@ describe("Layer 3: Frontend Database", () => {
   });
 
   describe("Performance and Storage", () => {
-    test.skip("should optimize storage for large datasets", async () => {
+    test("should optimize storage for large datasets", async () => {
       const largeDataset = Array.from({ length: 1000 }, (_, i) => ({
         id: `large-${i}`,
         type: "comment" as const,
@@ -374,7 +374,7 @@ describe("Layer 3: Frontend Database", () => {
       expect(highPriorityComments.length).toBeGreaterThan(0);
     });
 
-    test.skip("should handle concurrent operations safely", async () => {
+    test("should handle concurrent operations safely", async () => {
       // Simulate concurrent upserts
       const concurrentOps = Array.from({ length: 10 }, (_, i) =>
         db.upsert("comment", `concurrent-${i}`, {
