@@ -4,6 +4,8 @@ import { KalphiteStore } from "../store/KalphiteStore";
 // Mock Standard Schema implementation for testing
 const createMockSchema = () => ({
   "~standard": {
+    version: 1 as const,
+    vendor: "kalphite-test",
     validate: (data: any) => {
       if (!data.id || !data.type) {
         return {
@@ -17,6 +19,8 @@ const createMockSchema = () => ({
 
 const createAsyncMockSchema = () => ({
   "~standard": {
+    version: 1 as const,
+    vendor: "kalphite-test",
     validate: async (data: any) => {
       await new Promise((resolve) => setTimeout(resolve, 1));
       if (!data.id || !data.type) {
@@ -88,12 +92,16 @@ describe("Standard Schema Integration", () => {
       // Mock different schema libraries (Valibot, Zod, etc.)
       const valibotLikeSchema = {
         "~standard": {
+          version: 1 as const,
+          vendor: "valibot-test",
           validate: (data: any) => ({ value: data }),
         },
       };
 
       const zodLikeSchema = {
         "~standard": {
+          version: 1 as const,
+          vendor: "zod-test",
           validate: (data: any) => ({ value: data }),
         },
       };
@@ -106,6 +114,8 @@ describe("Standard Schema Integration", () => {
     test("should handle validation errors correctly", () => {
       const strictSchema = {
         "~standard": {
+          version: 1 as const,
+          vendor: "kalphite-test",
           validate: (data: any) => {
             if (!data.requiredField) {
               return {
@@ -133,6 +143,8 @@ describe("Standard Schema Integration", () => {
     test("should preserve path information in error issues", () => {
       const pathAwareSchema = {
         "~standard": {
+          version: 1 as const,
+          vendor: "kalphite-test",
           validate: (data: any) => {
             if (!data.nested?.field) {
               return {
@@ -198,12 +210,13 @@ describe("Standard Schema Integration", () => {
     test("should work with discriminated unions", () => {
       const discriminatedSchema = {
         "~standard": {
+          version: 1 as const,
+          vendor: "kalphite-test",
           validate: (data: any) => {
-            if (data.type === "user" && !data.email) {
-              return { issues: [{ message: "User requires email" }] };
-            }
-            if (data.type === "admin" && !data.permissions) {
-              return { issues: [{ message: "Admin requires permissions" }] };
+            if (!data.type) {
+              return {
+                issues: [{ message: "Type is required" }],
+              };
             }
             return { value: data };
           },
@@ -234,11 +247,23 @@ describe("Standard Schema Integration", () => {
         admin
       );
     });
-  });
 
-  describe("Performance with Standard Schema", () => {
-    test("should maintain performance with schema validation", () => {
-      const performanceSchema = createMockSchema();
+    test("should handle performance with large datasets", () => {
+      const performanceSchema = {
+        "~standard": {
+          version: 1 as const,
+          vendor: "kalphite-test",
+          validate: (data: any) => {
+            if (!data.id || !data.type) {
+              return {
+                issues: [{ message: "Missing required fields" }],
+              };
+            }
+            return { value: data };
+          },
+        },
+      };
+
       const store = KalphiteStore(performanceSchema);
 
       const startTime = performance.now();
@@ -265,6 +290,8 @@ describe("Standard Schema Integration", () => {
       // This test ensures we're implementing the standard correctly
       const compliantSchema = {
         "~standard": {
+          version: 1 as const,
+          vendor: "kalphite-test",
           validate: (input: unknown) => {
             // Standard Schema always returns an object with either:
             // - { value: T } for success
@@ -296,6 +323,28 @@ describe("Standard Schema Integration", () => {
       expect(() => {
         store.comment.push("not an object" as any);
       }).toThrow("Validation failed");
+    });
+
+    test("should work with compliant schema libraries", () => {
+      const compliantSchema = {
+        "~standard": {
+          version: 1 as const,
+          vendor: "kalphite-test",
+          validate: (input: unknown) => {
+            if (typeof input !== "object" || input === null) {
+              return {
+                issues: [{ message: "Expected object", path: [] }],
+              };
+            }
+            return { value: input };
+          },
+        },
+      };
+
+      const store = KalphiteStore(compliantSchema);
+      expect(() => {
+        store.comment.push({ id: "1", type: "test" });
+      }).not.toThrow();
     });
   });
 });

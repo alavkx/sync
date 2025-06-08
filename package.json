@@ -12,6 +12,7 @@
     "clean": "pnpm --recursive exec rm -rf dist node_modules"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.2"
   }
 }

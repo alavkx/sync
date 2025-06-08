@@ -1,13 +1,14 @@
 import { setGlobalStore } from "../react/useKalphiteStore";
 import type { KalphiteConfig } from "../types/config";
+import type { StandardSchemaV1 } from "../types/StandardSchema";
+import type { KalphiteStoreType } from "./KalphiteStore";
 import { KalphiteStore } from "./KalphiteStore";
 
-export async function initializeStore(
-  schema?: any,
-  config?: KalphiteConfig
-): Promise<KalphiteStore<any>> {
-  // Create the store
-  const store = new KalphiteStore(schema, config);
+export async function initializeStore<TSchema extends StandardSchemaV1>(
+  schema: TSchema,
+  config: KalphiteConfig = {}
+): Promise<KalphiteStoreType<TSchema>> {
+  const store = KalphiteStore(schema, config);
 
   // Set as global store for React hook
   setGlobalStore(store);

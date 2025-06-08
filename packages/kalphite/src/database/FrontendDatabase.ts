@@ -119,4 +119,83 @@ export class FrontendDatabase {
       updatedAt: new Date(row.updated_at).getTime(),
     };
   }
+
+  async query(entityType: string, filter: any = {}): Promise<any[]> {
+    if (!this.db) throw new Error("Database not initialized");
+    const conditions = Object.entries(filter)
+      .map(([key, value]) => `data->>'${key}' = $${key}`)
+      .join(" AND ");
+    const params = Object.values(filter);
+    const query = conditions
+      ? `SELECT * FROM ${entityType} WHERE ${conditions}`
+      : `SELECT * FROM ${entityType}`;
+    const result = await this.db.query(query, params);
+    return result.rows.map((row) => this.reconstructEntity(entityType, row));
+  }
+
+  async bulkUpsert(entityType: string, entities: any[]): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized");
+    await this.ensureTableExists(entityType);
+    for (const entity of entities) {
+      await this.upsert(entityType, entity.id, entity);
+    }
+  }
+
+  async delete(entityType: string, id: string): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized");
+    await this.db.query(`DELETE FROM ${entityType} WHERE id = $1`, [id]);
+  }
+
+  async bulkDelete(entityType: string, ids: string[]): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized");
+    await this.db.query(`DELETE FROM ${entityType} WHERE id = ANY($1)`, [ids]);
+  }
+
+  async clear(): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized");
+    const tables = await this.getTables();
+    for (const table of tables) {
+      await this.db.query(`DELETE FROM ${table}`);
+    }
+  }
+
+  async exportData(): Promise<Record<string, any[]>> {
+    if (!this.db) throw new Error("Database not initialized");
+    const tables = await this.getTables();
+    const data: Record<string, any[]> = {};
+    for (const table of tables) {
+      data[table] = await this.getByType(table);
+    }
+    return data;
+  }
+
+  async importData(data: Record<string, any[]>): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized");
+    await this.clear();
+    for (const [entityType, entities] of Object.entries(data)) {
+      await this.bulkUpsert(entityType, entities);
+    }
+  }
+
+  async getDatabaseSize(): Promise<number> {
+    if (!this.db) throw new Error("Database not initialized");
+    const tables = await this.getTables();
+    let totalSize = 0;
+    for (const table of tables) {
+      const result = await this.db.query(
+        `SELECT pg_total_relation_size($1) as size`,
+        [table]
+      );
+      totalSize += parseInt(result.rows[0].size);
+    }
+    return totalSize;
+  }
+
+  private async getTables(): Promise<string[]> {
+    if (!this.db) throw new Error("Database not initialized");
+    const result = await this.db.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
+    );
+    return result.rows.map((row) => row.table_name);
+  }
 }

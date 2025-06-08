@@ -9,13 +9,13 @@ import type {
   StatePatch,
   StateSyncRequest,
   StateSyncResponse,
+  WebSocketSyncConfig,
 } from "../types/operation-sync";
 import { HttpClientImpl } from "./HttpClient";
 import { WebSocketSyncEngine } from "./WebSocketSyncEngine";
 
 export class OperationSyncEngine extends WebSocketSyncEngine {
   private httpClient: HttpClient;
-  private config: OperationSyncConfig;
   private wsNotifications: WebSocket | null = null;
   private currentStateVersion: string = "";
   private lastSyncTimestamp: number = 0;
@@ -27,22 +27,24 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
   private batchedOperations: PendingOperation[] = [];
   private optimisticUpdates: Map<string, { entity: Entity; original: Entity }> =
     new Map();
+  private operationConfig: OperationSyncConfig;
 
   constructor(config: OperationSyncConfig) {
-    super({
-      wsUrl: config.notificationUrl || "",
-      roomId: "default",
+    // Handle backward compatibility with notificationUrl
+    const wsConfig: WebSocketSyncConfig = {
+      wsUrl: config.notificationUrl || config.wsUrl,
+      roomId: config.roomId,
       userId: config.userId,
       authToken: config.authToken,
-    });
-
-    this.config = config;
+    };
+    super(wsConfig);
+    this.operationConfig = config;
     this.httpClient = new HttpClientImpl(config);
     this.batchSize = config.batchSize || 10;
   }
 
   async connect(): Promise<void> {
-    if (this.config.notificationUrl) {
+    if (this.config.wsUrl) {
       try {
         await super.connect();
       } catch (error) {
@@ -55,7 +57,7 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
     }
 
     await this.syncState();
-    await this.flushOperationQueue();
+    await this.flushBatchedOperations();
   }
 
   async executeOperation(name: string, args: any[]): Promise<void> {
@@ -63,7 +65,7 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
       name,
       args,
       id: this.generateOperationId(),
-      clientId: this.config.clientId,
+      clientId: this.operationConfig.clientId,
       timestamp: Date.now(),
     };
 
@@ -83,7 +85,7 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
   }
 
   private addToQueue(operation: PendingOperation): void {
-    const queueLimit = this.config.offlineQueueLimit || 1000;
+    const queueLimit = this.operationConfig.offlineQueueLimit || 1000;
     if (this.operationQueue.length >= queueLimit) {
       this.operationQueue.shift();
     }
@@ -128,7 +130,7 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
       const response = await this.httpClient.post<
         StateSyncRequest,
         StateSyncResponse
-      >(this.config.stateEndpoint || "/sync/state", request);
+      >(this.operationConfig.stateEndpoint, request);
 
       this.applyStatePatch({
         stateVersion: response.stateVersion,
@@ -147,15 +149,15 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
   }
 
   private async pushOperations(operations: PendingOperation[]): Promise<void> {
-    const maxRetries = this.config.retryAttempts || 3;
-    const baseDelay = this.config.retryDelay || 1000;
+    const maxRetries = this.operationConfig.retryAttempts || 3;
+    const baseDelay = this.operationConfig.retryDelay || 1000;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const response = await this.httpClient.post<
           { operations: PendingOperation[] },
           { confirmations: OperationConfirmation[] }
-        >(this.config.operationsEndpoint || "/sync/operations", {
+        >(this.operationConfig.operationsEndpoint, {
           operations,
         });
 
@@ -207,9 +209,9 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
   }
 
   private setupNotifications(): void {
-    if (!this.config.notificationUrl) return;
+    if (!this.config.wsUrl) return;
 
-    this.wsNotifications = new WebSocket(this.config.notificationUrl);
+    this.wsNotifications = new WebSocket(this.config.wsUrl);
     this.wsNotifications.onmessage = (event) => {
       const message: NotificationMessage = JSON.parse(event.data);
       if (message.type === "operationConfirmed") {
@@ -246,11 +248,14 @@ export class OperationSyncEngine extends WebSocketSyncEngine {
 
   async flush(): Promise<void> {
     await this.flushBatchedOperations();
-    await super.flush();
-    await this.flushOperationQueue();
+    await this.syncState();
   }
 
   async disconnect(): Promise<void> {
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
+    }
     if (this.wsNotifications) {
       this.wsNotifications.close();
       this.wsNotifications = null;

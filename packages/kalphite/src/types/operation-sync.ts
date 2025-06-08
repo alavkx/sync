@@ -5,18 +5,23 @@ export interface Entity {
   updatedAt: number;
 }
 
-export interface OperationSyncConfig {
+export interface WebSocketSyncConfig {
+  wsUrl: string;
+  roomId: string;
+  userId: string;
+  authToken?: string;
+}
+
+export interface OperationSyncConfig extends WebSocketSyncConfig {
   baseUrl: string;
   operationsEndpoint: string;
   stateEndpoint: string;
-  notificationUrl?: string;
   clientId: string;
-  userId: string;
-  authToken?: string;
   batchSize?: number;
   retryAttempts?: number;
   retryDelay?: number;
   offlineQueueLimit?: number;
+  notificationUrl?: string;
 }
 
 export interface PendingOperation {

@@ -19,8 +19,8 @@ export interface WebSocketSyncConfig {
 }
 
 export class WebSocketSyncEngine extends EventEmitter {
+  protected config: WebSocketSyncConfig;
   private ws: WebSocket | null = null;
-  private config: WebSocketSyncConfig;
   private changeQueue: SyncChange[] = [];
   private isConnecting: boolean = false;
   private reconnectAttempts: number = 0;

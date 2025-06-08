@@ -5,6 +5,9 @@ import type { StandardSchemaV1 } from "../types/StandardSchema";
 
 type InferOutput<T extends StandardSchemaV1> = StandardSchemaV1.InferOutput<T>;
 
+export type KalphiteStoreType<TSchema extends StandardSchemaV1 = any> =
+  KalphiteStoreImpl<TSchema> & Record<string, any[]>;
+
 class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
   private entities = new Map<EntityId, InferOutput<TSchema>>();
   private subscribers = new Set<() => void>();
