@@ -1,52 +1,45 @@
-# Kalphite Sync Engine Documentation
+# Kalphite Documentation
 
-## 📋 Documentation
+> Memory-first sync engine with intuitive API
 
-- **[memory-first-sync-master.md](./memory-first-sync-master.md)** - Complete architecture guide with schema strategy and implementation patterns
-- **[prd.md](./prd.md)** - Original code review app requirements
+## Quick Start
 
-## 🎯 **Quick Start**
+- **[📖 Main Documentation](./kalphite/README.md)** - Complete overview and API guide
+- **[Setup Guide](./kalphite/setup.md)** - Development setup and troubleshooting
 
-1. **Read**: [memory-first-sync-master.md](./memory-first-sync-master.md) for complete architecture
-2. **Understand**: The schema-agnostic approach with Standard Schema integration
-3. **Implement**: Follow the implementation guide with your preferred schema library
+## Understanding Kalphite
 
-## 🚀 **Key Features**
+- **[Architecture](./kalphite/architecture.md)** - Complete technical design
+- **[Status](./kalphite/status.md)** - Current progress and roadmap
+- **[Decisions](./kalphite/decisions.md)** - Key architectural choices
 
-### Schema-Agnostic Design
+## Development
 
-- **Standard Schema Integration**: Use any compliant schema library (Zod, Valibot, ArkType, etc.)
-- **Type Safety Everywhere**: Full TypeScript inference from user's schema
-- **Zero Lock-in**: Kalphite doesn't dictate validation approach
+- **[Testing](./kalphite/testing.md)** - Test-driven methodology
 
-### Memory-First Approach
+---
 
-- All data lives in memory for synchronous access
-- Background persistence with automatic flushing
-- Single `useKalphiteStore()` hook for all React components
+## Current Status
 
-### Radical Simplification
+**Ready**: Local development ✅  
+**Coming**: Persistence (Layer 2) 🚧  
+**Future**: Real-time sync 📋
 
-- Every component re-renders on every change (intentionally!)
-- No complex selectors or optimizations
-- Direct data access like a local JavaScript object
+## API Highlight
 
-### 4-Layer Architecture
+```typescript
+const store = KalphiteStore(schema);
 
-1. **Hot**: In-Memory Store (RAM) with schema validation
-2. **Warm**: Memory Flush Engine (Memory → Disk)
-3. **Cool**: Frontend Database (PGlite + IndexedDB)
-4. **Cold**: Network Sync Engine (Server communication)
+// Intuitive access
+const comments = store.comment;
+const reviews = store.review;
 
-## 📈 **Philosophy**
+// Type-safe operations
+store.comment.upsert("id", entity);
+store.review.delete("id");
 
-Kalphite represents a radical simplification of traditional sync engines by embracing trade-offs (performance for simplicity) to create dramatically better developer experience. The result is a sync engine that's **simple, predictable, type-safe, and impossible to get wrong** - perfect for learning, prototyping, and building real applications where "fast enough" is good enough.
+// Natural queries
+const urgent = store.comment.filter((c) => c.data.priority === "high");
+```
 
-## 🔄 **Future Enhancements**
-
-The master document contains everything needed to implement Kalphite with your preferred schema library. Future work could explore:
-
-- Performance optimizations (when needed)
-- Real-time WebSocket integration
-- Advanced conflict resolution strategies
-- Mobile/offline-first enhancements
+No async/await. No loading states. Just synchronous simplicity.

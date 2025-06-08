@@ -1,5 +1,6 @@
 import type { KalphiteConfig } from "../types/config";
 import type { EntityId, EntityType } from "../types/entity";
+import { TypedCollection } from "./TypedCollection";
 
 // Standard Schema integration (using conditional types for compatibility)
 type StandardSchemaV1 = {
@@ -19,11 +20,12 @@ type InferOutput<T extends StandardSchemaV1> = T extends {
   ? any // Will be properly typed when Standard Schema is available
   : never;
 
-export class KalphiteStore<TSchema extends StandardSchemaV1 = any> {
-  private _entities = new Map<EntityId, InferOutput<TSchema>>();
+class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
+  public _entities = new Map<EntityId, InferOutput<TSchema>>();
   private subscribers = new Set<() => void>();
   private schema?: TSchema;
   private config: KalphiteConfig;
+  private typeCollections = new Map<string, TypedCollection>();
 
   constructor(schema?: TSchema, config: KalphiteConfig = {}) {
     this.schema = schema;
@@ -71,9 +73,11 @@ export class KalphiteStore<TSchema extends StandardSchemaV1 = any> {
   // Direct entity setting with change tracking
   private setEntity(entityId: EntityId, entity: InferOutput<TSchema>): void {
     this._entities.set(entityId, entity);
-    this.notifySubscribers();
 
-    // Trigger flush (would integrate with MemoryFlushEngine)
+    // Invalidate cached type collections
+    this.typeCollections.clear();
+
+    this.notifySubscribers();
     this.scheduleFlush(entityId, entity);
   }
 
@@ -84,7 +88,7 @@ export class KalphiteStore<TSchema extends StandardSchemaV1 = any> {
 
   getByType(type: EntityType): InferOutput<TSchema>[] {
     return Array.from(this._entities.values()).filter(
-      (entity) => (entity as any).type === type
+      (entity) => entity && (entity as any).type === type
     );
   }
 
@@ -92,16 +96,31 @@ export class KalphiteStore<TSchema extends StandardSchemaV1 = any> {
     return Array.from(this._entities.values());
   }
 
+  // NEW API: Get typed collection for a specific entity type
+  getTypeCollection(type: string): TypedCollection {
+    if (!this.typeCollections.has(type)) {
+      const entities = this.getByType(type);
+      const collection = new TypedCollection(type, this, entities);
+      this.typeCollections.set(type, collection);
+    }
+    return this.typeCollections.get(type)!;
+  }
+
   // Bulk operations
   loadEntities(entities: InferOutput<TSchema>[]): void {
     entities.forEach((entity) => {
       this._entities.set((entity as any).id, entity);
     });
+
+    // Invalidate cached type collections
+    this.typeCollections.clear();
+
     this.notifySubscribers();
   }
 
   clear(): void {
     this._entities.clear();
+    this.typeCollections.clear();
     this.notifySubscribers();
   }
 
@@ -111,7 +130,7 @@ export class KalphiteStore<TSchema extends StandardSchemaV1 = any> {
     return () => this.subscribers.delete(callback);
   };
 
-  private notifySubscribers(): void {
+  notifySubscribers(): void {
     this.subscribers.forEach((callback) => callback());
   }
 
@@ -136,4 +155,28 @@ export class KalphiteStore<TSchema extends StandardSchemaV1 = any> {
       logFn?.(...args);
     }
   }
+}
+
+// Export a Proxy-wrapped store that provides dynamic property access
+export function KalphiteStore<TSchema extends StandardSchemaV1 = any>(
+  schema?: TSchema,
+  config: KalphiteConfig = {}
+): KalphiteStoreImpl<TSchema> & Record<string, TypedCollection> {
+  const store = new KalphiteStoreImpl(schema, config);
+
+  return new Proxy(store, {
+    get(target, prop) {
+      // If it's a known method/property, return it
+      if (prop in target || typeof prop === "symbol") {
+        return (target as any)[prop];
+      }
+
+      // If it's a string property (entity type), return a TypedCollection
+      if (typeof prop === "string") {
+        return target.getTypeCollection(prop);
+      }
+
+      return undefined;
+    },
+  }) as KalphiteStoreImpl<TSchema> & Record<string, TypedCollection>;
 }

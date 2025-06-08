@@ -2,6 +2,7 @@
 export { useKalphiteStore } from "./react/useKalphiteStore";
 export { initializeStore } from "./store/initialize";
 export { KalphiteStore } from "./store/KalphiteStore";
+export { TypedCollection } from "./store/TypedCollection";
 
 // Types
 export type { KalphiteConfig } from "./types/config";
