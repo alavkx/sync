@@ -75,13 +75,24 @@ export class ModernSyncEngine extends NetworkSyncEngine {
       try {
         await this.pushOperations([operation]);
       } catch (error) {
-        // Add back to queue for retry
-        this.modernOperationQueue.push(operation);
+        // Add back to queue for retry, respecting queue limits
+        this.addToQueue(operation);
         throw error;
       }
     } else {
-      this.modernOperationQueue.push(operation);
+      this.addToQueue(operation);
     }
+  }
+
+  private addToQueue(operation: PendingOperation): void {
+    const queueLimit = this.modernConfig.offlineQueueLimit;
+
+    if (queueLimit && this.modernOperationQueue.length >= queueLimit) {
+      // Remove oldest operation to make room
+      this.modernOperationQueue.shift();
+    }
+
+    this.modernOperationQueue.push(operation);
   }
 
   async syncState(): Promise<void> {
@@ -107,7 +118,7 @@ export class ModernSyncEngine extends NetworkSyncEngine {
       this.currentStateVersion = response.stateVersion;
       this.lastSyncTimestamp = response.syncTimestamp;
     } catch (error) {
-      this.emitEvent("error", error);
+      this.emit("error", error);
       throw error;
     }
   }
@@ -260,7 +271,9 @@ export class ModernSyncEngine extends NetworkSyncEngine {
     return this.executeOperation(operation.name, operation.args);
   }
 
-  private convertChangeToOperation(change: SyncChange): {
+  private convertChangeToOperation(
+    change: Omit<SyncChange, "operationId" | "timestamp" | "userId">
+  ): {
     name: string;
     args: any[];
   } {

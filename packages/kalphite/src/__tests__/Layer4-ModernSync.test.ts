@@ -366,21 +366,25 @@ describe("Layer 4: Modern Sync (Operation-Based)", () => {
 
   describe("📡 WebSocket Notifications", () => {
     test("should handle state_changed notifications", async () => {
+      // Mock the syncState method to track calls
+      const syncStateSpy = vi
+        .spyOn(syncEngine, "syncState")
+        .mockResolvedValue();
+
+      // Mock WebSocket constructor to return our mock
       const mockWebSocket = {
         onmessage: null as any,
+        onerror: null as any,
+        onclose: null as any,
         close: vi.fn(),
       };
 
-      // Set up WebSocket
-      (syncEngine as any).wsNotifications = mockWebSocket;
-      (syncEngine as any).setupNotifications();
+      // Mock the WebSocket constructor globally
+      const originalWebSocket = global.WebSocket;
+      global.WebSocket = vi.fn().mockImplementation(() => mockWebSocket);
 
-      // Mock state sync response
-      mockHttpClient.setResponse("/sync/state", {
-        stateVersion: "v3.0",
-        entities: [],
-        syncTimestamp: Date.now(),
-      });
+      // Trigger setupNotifications which will use our mocked WebSocket
+      (syncEngine as any).setupNotifications();
 
       // Simulate state_changed notification
       const notification = {
@@ -398,21 +402,34 @@ describe("Layer 4: Modern Sync (Operation-Based)", () => {
         mockWebSocket.onmessage({ data: JSON.stringify(notification) });
       }
 
-      // Should trigger state sync
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockHttpClient.getRequests()).toHaveLength(1);
+      // Wait for async operations
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Should have called syncState
+      expect(syncStateSpy).toHaveBeenCalledTimes(1);
+
+      // Restore mocks
+      syncStateSpy.mockRestore();
+      global.WebSocket = originalWebSocket;
     });
 
     test("should handle operation_confirmed notifications", async () => {
       const confirmations: any[] = [];
       syncEngine.onOperationConfirmed((op) => confirmations.push(op));
 
+      // Mock WebSocket constructor to return our mock
       const mockWebSocket = {
         onmessage: null as any,
+        onerror: null as any,
+        onclose: null as any,
         close: vi.fn(),
       };
 
-      (syncEngine as any).wsNotifications = mockWebSocket;
+      // Mock the WebSocket constructor globally
+      const originalWebSocket = global.WebSocket;
+      global.WebSocket = vi.fn().mockImplementation(() => mockWebSocket);
+
+      // Trigger setupNotifications which will use our mocked WebSocket
       (syncEngine as any).setupNotifications();
 
       // Add pending operation
@@ -441,8 +458,14 @@ describe("Layer 4: Modern Sync (Operation-Based)", () => {
         mockWebSocket.onmessage({ data: JSON.stringify(notification) });
       }
 
+      // Wait for async operations
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
       expect(confirmations).toHaveLength(1);
       expect(confirmations[0].name).toBe("addTodo");
+
+      // Restore WebSocket mock
+      global.WebSocket = originalWebSocket;
     });
   });
 
@@ -522,26 +545,40 @@ describe("Layer 4: Modern Sync (Operation-Based)", () => {
     test("should provide accurate pending operations count", async () => {
       expect(syncEngine.getPendingOperations()).toHaveLength(0);
 
-      // Add some pending operations (don't await to keep them pending)
-      mockHttpClient.setResponse(
-        "/sync/operations",
-        new Promise((resolve) => {
-          // Don't resolve immediately to keep operations pending
-        })
-      );
+      // Create a promise that we can control
+      let resolvePromise: (value: any) => void;
+      const controlledPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
 
+      // Mock HTTP client to return our controlled promise
+      mockHttpClient.setResponse("/sync/operations", controlledPromise);
+
+      // Start operation (don't await to keep it pending)
       const operationPromise = syncEngine.executeOperation("addTodo", [
         "Pending todo",
       ]);
 
+      // Should show as pending
       expect(syncEngine.getPendingOperations()).toHaveLength(1);
 
-      // Clean up
-      try {
-        await operationPromise;
-      } catch {
-        // Expected to timeout/fail
-      }
+      // Resolve the promise to complete the operation
+      resolvePromise!({
+        confirmations: [
+          {
+            operationId: 1,
+            clientId: "test-client-1",
+            success: true,
+            serverTimestamp: Date.now(),
+          },
+        ],
+      });
+
+      // Wait for operation to complete
+      await operationPromise;
+
+      // Should no longer be pending
+      expect(syncEngine.getPendingOperations()).toHaveLength(0);
     });
 
     test("should provide current state version", () => {

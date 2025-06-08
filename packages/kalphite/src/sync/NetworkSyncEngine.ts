@@ -368,7 +368,7 @@ export class NetworkSyncEngine {
       .substr(2, 9)}`;
   }
 
-  private emit(event: string, data?: any): void {
+  protected emit(event: string, data?: any): void {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.forEach((handler) => handler(data));
