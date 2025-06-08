@@ -38,7 +38,7 @@ Our memory-first approach makes everything synchronous:
 
 ```typescript
 // ✅ Memory-First: Direct access, zero async
-const store = useMemoryStore();
+const store = useKalphiteStore();
 const comments = store.getByType("comment"); // Sync!
 const comment = store.getById("comment-123"); // Sync!
 store.entities.set("comment-123", newComment); // Sync! (persistence automatic)
@@ -132,7 +132,7 @@ interface Entity {
   updatedAt: number;
 }
 
-class MemoryStore {
+class KalphiteStore {
   private _entities = new Map<string, Entity>();
   private subscribers = new Set<() => void>();
   private flushEngine: MemoryFlushEngine;
@@ -559,10 +559,10 @@ class NetworkSyncEngine {
 import { useSyncExternalStore } from "react";
 
 // Global store instance
-let store: MemoryStore;
+let store: KalphiteStore;
 
 // One hook to rule them all
-export function useMemoryStore(): MemoryStore {
+export function useKalphiteStore(): KalphiteStore {
   return useSyncExternalStore(
     store.subscribe,
     () => store, // Return entire store
@@ -592,7 +592,7 @@ export async function initializeStore(): Promise<void> {
 ```typescript
 // Every component follows this pattern:
 const MyComponent = () => {
-  const store = useMemoryStore(); // Re-renders on ANY change
+  const store = useKalphiteStore(); // Re-renders on ANY change
 
   // Extract what you need (computed every render - simple!)
   const comments = store.getByType("comment");
@@ -637,7 +637,7 @@ npm install @tanstack/start
 
 ```typescript
 // app/lib/store.ts
-import { initializeStore } from "./memory-store";
+import { initializeStore } from "./kalphite-store";
 
 export async function setupStore() {
   await initializeStore();
@@ -690,7 +690,7 @@ export const pullChanges = createServerFn(
 
 ```typescript
 const CodeReviewApp = () => {
-  const store = useMemoryStore();
+  const store = useKalphiteStore();
 
   const comments = store.getByType("comment");
   const reviews = store.getByType("review");
@@ -704,7 +704,7 @@ const CodeReviewApp = () => {
 };
 
 const CommentThread = ({ comments }) => {
-  const store = useMemoryStore();
+  const store = useKalphiteStore();
 
   const addComment = (message: string, lineNumber: number) => {
     store.entities.set(crypto.randomUUID(), {
@@ -738,7 +738,7 @@ const CommentThread = ({ comments }) => {
 
 ```typescript
 const Dashboard = () => {
-  const store = useMemoryStore();
+  const store = useKalphiteStore();
 
   // All computed every render - embracing simplicity!
   const totalComments = store.getByType("comment").length;
@@ -784,7 +784,7 @@ const Dashboard = () => {
 
 **🧠 Cognitive Load**
 
-- Single pattern: `const store = useMemoryStore()`
+- Single pattern: `const store = useKalphiteStore()`
 - No selectors, no memoization, no optimization
 - Direct data access like a local object
 - Predictable: all changes trigger all re-renders
