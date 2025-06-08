@@ -4,7 +4,7 @@ import { KalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Integration: Real-World Usage Patterns", () => {
-  let store: ReturnType<typeof KalphiteStore>;
+  let store: any;
 
   beforeEach(() => {
     store = KalphiteStore();
@@ -18,7 +18,7 @@ describe("Integration: Real-World Usage Patterns", () => {
         "Feature implementation review",
         "pending"
       );
-      store.review.upsert("r1", review);
+      store.review.push(review);
 
       // Add comments from different reviewers
       const comments = [
@@ -29,16 +29,18 @@ describe("Integration: Real-World Usage Patterns", () => {
       ];
 
       comments.forEach((comment) => {
-        store.comment.upsert(comment.id, comment);
+        store.comment.push(comment);
       });
 
       // Query patterns common in code review apps
-      const allComments = store.comment.where((c) => true);
-      const criticalComments = store.comment.where(
-        (c) =>
+      const allComments = store.comment;
+      const criticalComments = store.comment.filter(
+        (c: any) =>
           c.data.message.includes("error") || c.data.message.includes("test")
       );
-      const commentsByLine = store.comment.orderBy((c) => c.data.lineNumber);
+      const commentsByLine = store.comment.sort(
+        (a: any, b: any) => a.data.lineNumber - b.data.lineNumber
+      );
 
       expect(allComments).toHaveLength(4);
       expect(criticalComments).toHaveLength(2);
@@ -52,24 +54,24 @@ describe("Integration: Real-World Usage Patterns", () => {
 
       // Initial review
       const review = createReviewEntity("r1", "Initial review", "pending");
-      store.review.upsert("r1", review);
+      store.review.push(review);
 
       // Approve review
       const approvedReview = {
         ...review,
         data: { ...review.data, status: "approved" },
       };
-      store.review.upsert("r1", approvedReview);
+      store.review.push(approvedReview);
 
       // Request changes
       const changesReview = {
         ...review,
         data: { ...review.data, status: "changes_requested" },
       };
-      store.review.upsert("r1", changesReview);
+      store.review.push(changesReview);
 
       expect(stateChanges).toBe(3);
-      expect(store.review[0].data.status).toBe("changes_requested");
+      expect(store.review[2].data.status).toBe("changes_requested");
 
       unsubscribe();
     });
@@ -78,40 +80,27 @@ describe("Integration: Real-World Usage Patterns", () => {
   describe("Collaborative Editing Patterns", () => {
     test("simulates multiple users editing simultaneously", () => {
       // User 1 adds comments
-      store.comment.upsert(
-        "c1",
-        createCommentEntity("c1", "User 1 comment", 10)
-      );
-      store.comment.upsert(
-        "c2",
-        createCommentEntity("c2", "Another from user 1", 20)
-      );
+      store.comment.push(createCommentEntity("c1", "User 1 comment", 10));
+      store.comment.push(createCommentEntity("c2", "Another from user 1", 20));
 
       // User 2 adds comments
-      store.comment.upsert(
-        "c3",
-        createCommentEntity("c3", "User 2 comment", 15)
-      );
-      store.comment.upsert(
-        "c4",
-        createCommentEntity("c4", "User 2 feedback", 25)
-      );
+      store.comment.push(createCommentEntity("c3", "User 2 comment", 15));
+      store.comment.push(createCommentEntity("c4", "User 2 feedback", 25));
 
       // User 1 updates their comment
-      store.comment.upsert(
-        "c1",
+      store.comment.push(
         createCommentEntity("c1", "User 1 updated comment", 10)
       );
 
       // Verify final state
       expect(store.comment).toHaveLength(4);
-      expect(store.comment.findById("c1")?.data.message).toBe(
-        "User 1 updated comment"
-      );
+      expect(store.comment[0].data.message).toBe("User 1 updated comment");
 
       // Verify ordering by line number
-      const sortedComments = store.comment.orderBy((c) => c.data.lineNumber);
-      expect(sortedComments.map((c) => c.data.lineNumber)).toEqual([
+      const sortedComments = store.comment.sort(
+        (a: any, b: any) => a.data.lineNumber - b.data.lineNumber
+      );
+      expect(sortedComments.map((c: any) => c.data.lineNumber)).toEqual([
         10, 15, 20, 25,
       ]);
     });
@@ -119,15 +108,15 @@ describe("Integration: Real-World Usage Patterns", () => {
     test("handles conflict resolution patterns", () => {
       // Simulate conflicting edits to same entity
       const baseComment = createCommentEntity("c1", "Original comment", 10);
-      store.comment.upsert("c1", baseComment);
+      store.comment.push(baseComment);
 
       // User A's edit
       const userAEdit = createCommentEntity("c1", "User A's version", 10);
-      store.comment.upsert("c1", userAEdit);
+      store.comment.push(userAEdit);
 
       // User B's edit (overwrites A's edit - last write wins)
       const userBEdit = createCommentEntity("c1", "User B's version", 10);
-      store.comment.upsert("c1", userBEdit);
+      store.comment.push(userBEdit);
 
       expect(store.comment).toHaveLength(1);
       expect(store.comment[0].data.message).toBe("User B's version");
@@ -147,21 +136,21 @@ describe("Integration: Real-World Usage Patterns", () => {
       });
 
       // Simulate store integration (would be built into KalphiteStore)
-      const originalUpsert = store.comment.upsert.bind(store.comment);
-      store.comment.upsert = (id: string, entity: any) => {
-        const result = originalUpsert(id, entity);
-        flushEngine.scheduleFlush(id, entity);
+      const originalPush = store.comment.push.bind(store.comment);
+      store.comment.push = (entity: any) => {
+        const result = originalPush(entity);
+        flushEngine.scheduleFlush(entity.id, entity);
         return result;
       };
 
       // Add some entities
-      store.comment.upsert("c1", createCommentEntity("c1", "Test 1", 1));
-      store.comment.upsert("c2", createCommentEntity("c2", "Test 2", 2));
+      store.comment.push(createCommentEntity("c1", "Test 1", 1));
+      store.comment.push(createCommentEntity("c2", "Test 2", 2));
 
       // Verify changes are queued
       const queuedChanges = flushEngine.getQueuedChanges();
       expect(queuedChanges).toHaveLength(2);
-      expect(queuedChanges[0].operation).toBe("upsert");
+      expect(queuedChanges[0].operation).toBe("push");
     });
 
     test("handles offline/online scenarios", () => {
@@ -186,10 +175,7 @@ describe("Integration: Real-World Usage Patterns", () => {
       });
 
       // Offline operations
-      flushEngine.scheduleFlush(
-        "c1",
-        createCommentEntity("c1", "Offline comment", 1)
-      );
+      store.comment.push(createCommentEntity("c1", "Offline comment", 1));
 
       // Should remain queued
       expect(flushEngine.getQueuedChanges()).toHaveLength(1);
@@ -198,10 +184,7 @@ describe("Integration: Real-World Usage Patterns", () => {
       isOnline = true;
 
       // New operations should work
-      flushEngine.scheduleFlush(
-        "c2",
-        createCommentEntity("c2", "Online comment", 2)
-      );
+      store.comment.push(createCommentEntity("c2", "Online comment", 2));
     });
   });
 
@@ -215,9 +198,9 @@ describe("Integration: Real-World Usage Patterns", () => {
         entities.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
       }
 
-      // Batch upsert
+      // Batch push
       entities.forEach((entity) => {
-        store.comment.upsert(entity.id, entity);
+        store.comment.push(entity);
       });
 
       const insertTime = performance.now() - startTime;
@@ -227,8 +210,8 @@ describe("Integration: Real-World Usage Patterns", () => {
 
       // Bulk query pattern
       const queryStart = performance.now();
-      const evenLineComments = store.comment.where(
-        (c) => c.data.lineNumber % 2 === 0
+      const evenLineComments = store.comment.filter(
+        (c: any) => c.data.lineNumber % 2 === 0
       );
       const queryTime = performance.now() - queryStart;
 
@@ -239,10 +222,7 @@ describe("Integration: Real-World Usage Patterns", () => {
     test("demonstrates memory-efficient pagination", () => {
       // Setup large dataset
       for (let i = 0; i < 10000; i++) {
-        store.comment.upsert(
-          `c${i}`,
-          createCommentEntity(`c${i}`, `Comment ${i}`, i)
-        );
+        store.comment.push(createCommentEntity(`c${i}`, `Comment ${i}`, i));
       }
 
       // Pagination pattern
@@ -256,8 +236,8 @@ describe("Integration: Real-World Usage Patterns", () => {
       expect(page3).toHaveLength(50);
 
       // Verify no overlap
-      const page1Ids = page1.map((c) => c.id);
-      const page2Ids = page2.map((c) => c.id);
+      const page1Ids = page1.map((c: any) => c.id);
+      const page2Ids = page2.map((c: any) => c.id);
       const overlap = page1Ids.filter((id) => page2Ids.includes(id));
       expect(overlap).toHaveLength(0);
     });
@@ -277,11 +257,8 @@ describe("Integration: Real-World Usage Patterns", () => {
       });
 
       // Trigger updates
-      store.comment.upsert("c1", createCommentEntity("c1", "New comment", 1));
-      store.review.upsert(
-        "r1",
-        createReviewEntity("r1", "New review", "pending")
-      );
+      store.comment.push(createCommentEntity("c1", "New comment", 1));
+      store.review.push(createReviewEntity("r1", "New review", "pending"));
 
       // Both components should have been notified
       expect(componentUpdates).toHaveLength(4); // 2 updates × 2 subscribers
@@ -308,14 +285,11 @@ describe("Integration: Real-World Usage Patterns", () => {
       const unsubscribe2 = store.subscribe(reviewSubscriber);
 
       // Update comments
-      store.comment.upsert("c1", createCommentEntity("c1", "Comment 1", 1));
-      store.comment.upsert("c2", createCommentEntity("c2", "Comment 2", 2));
+      store.comment.push(createCommentEntity("c1", "Comment 1", 1));
+      store.comment.push(createCommentEntity("c2", "Comment 2", 2));
 
       // Update reviews
-      store.review.upsert(
-        "r1",
-        createReviewEntity("r1", "Review 1", "pending")
-      );
+      store.review.push(createReviewEntity("r1", "Review 1", "pending"));
 
       // All subscribers get notified (in real implementation, selectors would filter)
       expect(commentUpdates).toBe(3);
@@ -337,20 +311,22 @@ describe("Integration: Real-World Usage Patterns", () => {
         createCommentEntity("c5", "TODO: Add tests", 50),
       ];
 
-      comments.forEach((comment) => store.comment.upsert(comment.id, comment));
+      comments.forEach((comment) => store.comment.push(comment));
 
       // Complex queries
-      const todoComments = store.comment.where(
-        (c) =>
+      const todoComments = store.comment.filter(
+        (c: any) =>
           c.data.message.includes("TODO") || c.data.message.includes("FIXME")
       );
 
-      const positiveComments = store.comment.where(
-        (c) =>
+      const positiveComments = store.comment.filter(
+        (c: any) =>
           c.data.message.includes("Great") || c.data.message.includes("good")
       );
 
-      const sortedByLineDesc = store.comment.orderBy((c) => -c.data.lineNumber);
+      const sortedByLineDesc = store.comment.sort(
+        (a: any, b: any) => b.data.lineNumber - a.data.lineNumber
+      );
 
       expect(todoComments).toHaveLength(3);
       expect(positiveComments).toHaveLength(1);
@@ -362,10 +338,7 @@ describe("Integration: Real-World Usage Patterns", () => {
       for (let i = 0; i < 100; i++) {
         const status =
           i % 3 === 0 ? "approved" : i % 3 === 1 ? "pending" : "rejected";
-        store.review.upsert(
-          `r${i}`,
-          createReviewEntity(`r${i}`, `Review ${i}`, status)
-        );
+        store.review.push(createReviewEntity(`r${i}`, `Review ${i}`, status));
       }
 
       // Aggregation patterns
@@ -375,8 +348,8 @@ describe("Integration: Real-World Usage Patterns", () => {
       }, {} as Record<string, number>);
 
       const totalReviews = store.review.length;
-      const approvedCount = store.review.where(
-        (r) => r.data.status === "approved"
+      const approvedCount = store.review.filter(
+        (r: any) => r.data.status === "approved"
       ).length;
       const approvalRate = approvedCount / totalReviews;
 
