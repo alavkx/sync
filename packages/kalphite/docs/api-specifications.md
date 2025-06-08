@@ -403,26 +403,33 @@ export interface OperationConfirmedNotification extends NotificationMessage {
 ```typescript
 // src/sync/ModernSyncEngine.ts - NEW HYBRID IMPLEMENTATION
 
-export class ModernSyncEngine extends NetworkSyncEngine {
+export class OperationSyncEngine extends WebSocketSyncEngine {
   private httpClient: HttpClient;
   private wsNotifications: WebSocket | null = null;
   private currentStateVersion: string = "";
   private pendingOperations: Map<number, PendingOperation> = new Map();
   private operationQueue: PendingOperation[] = [];
+  private batchSize: number;
+  private batchTimeout: NodeJS.Timeout | null = null;
+  private batchedOperations: PendingOperation[] = [];
+  private optimisticUpdates: Map<string, { entity: Entity; original: Entity }> =
+    new Map();
 
-  constructor(config: ModernSyncConfig) {
-    // Initialize with backward compatibility
+  constructor(config: OperationSyncConfig) {
+    // Initialize with WebSocket support
     super({
-      wsUrl: config.notificationUrl || "",
-      roomId: "default",
+      wsUrl: config.wsUrl,
+      roomId: config.roomId,
       userId: config.userId,
+      authToken: config.authToken,
     });
 
     this.httpClient = new HttpClientImpl(config);
     this.config = config;
+    this.batchSize = config.batchSize || 10;
   }
 
-  // 🆕 NEW: Operation-based sync methods
+  // Operation-based sync methods
   async executeOperation(name: string, args: any[]): Promise<void> {
     const operation: PendingOperation = {
       name,
@@ -434,10 +441,19 @@ export class ModernSyncEngine extends NetworkSyncEngine {
 
     this.pendingOperations.set(operation.id, operation);
 
+    // Apply optimistic update
+    const affectedEntities = this.applyOptimisticUpdate(operation);
+
     if (this.isOnline()) {
-      await this.pushOperations([operation]);
+      this.batchedOperations.push(operation);
+
+      if (this.batchedOperations.length >= this.batchSize) {
+        await this.flushBatchedOperations();
+      } else {
+        this.scheduleBatchSend();
+      }
     } else {
-      this.operationQueue.push(operation);
+      this.addToQueue(operation);
     }
   }
 
@@ -449,7 +465,7 @@ export class ModernSyncEngine extends NetworkSyncEngine {
 
     const response = await this.httpClient.post<
       StateSyncRequest,
-      StateSyncResponse<any>
+      StateSyncResponse
     >(this.config.stateEndpoint || "/sync/state", request);
 
     this.applyStatePatch({
@@ -464,126 +480,7 @@ export class ModernSyncEngine extends NetworkSyncEngine {
     this.lastSyncTimestamp = response.syncTimestamp;
   }
 
-  private async pushOperations(operations: PendingOperation[]): Promise<void> {
-    try {
-      const response = await this.httpClient.post<
-        { operations: PendingOperation[] },
-        { confirmations: OperationConfirmation[] }
-      >(this.config.operationsEndpoint || "/sync/operations", { operations });
-
-      this.handleOperationConfirmations(response.confirmations);
-    } catch (error) {
-      // Add back to queue for retry
-      this.operationQueue.push(...operations);
-      throw error;
-    }
-  }
-
-  private handleOperationConfirmations(
-    confirmations: OperationConfirmation[]
-  ): void {
-    for (const confirmation of confirmations) {
-      const pendingOp = this.pendingOperations.get(confirmation.operationId);
-
-      if (pendingOp) {
-        this.pendingOperations.delete(confirmation.operationId);
-
-        if (confirmation.success) {
-          this.emit("operationConfirmed", {
-            ...pendingOp,
-            serverTimestamp: confirmation.serverTimestamp,
-          });
-        } else {
-          this.emit("operationFailed", {
-            operation: pendingOp,
-            error: confirmation.error,
-          });
-        }
-      }
-    }
-  }
-
-  private applyStatePatch(patch: StatePatch): void {
-    // Apply entities and deletions to store
-    for (const entity of patch.entities) {
-      this.emit("remoteChange", {
-        type: "upsert",
-        entityType: entity.type,
-        entityId: entity.id,
-        entity,
-        timestamp: patch.timestamp,
-        userId: "server",
-        operationId: `state-${patch.timestamp}`,
-      });
-    }
-
-    for (const deletedId of patch.deletedEntityIds) {
-      // Need to determine entity type from deleted ID
-      // This might require server to provide type info
-      this.emit("remoteChange", {
-        type: "delete",
-        entityType: "unknown", // TODO: Server should provide type
-        entityId: deletedId,
-        timestamp: patch.timestamp,
-        userId: "server",
-        operationId: `state-delete-${patch.timestamp}`,
-      });
-    }
-
-    this.emit("statePatch", patch);
-  }
-
-  // Enhanced WebSocket notifications
-  private setupNotifications(): void {
-    if (!this.config.notificationUrl) return;
-
-    this.wsNotifications = new WebSocket(this.config.notificationUrl);
-
-    this.wsNotifications.onmessage = (event) => {
-      const notification: NotificationMessage = JSON.parse(event.data);
-
-      switch (notification.type) {
-        case "state_changed":
-          // Pull latest state via HTTP
-          this.syncState().catch((error) => this.emit("error", error));
-          break;
-
-        case "operation_confirmed":
-          const opNotification = notification as OperationConfirmedNotification;
-          this.handleOperationConfirmations([opNotification.payload]);
-          break;
-      }
-    };
-  }
-
-  // 🔄 COMPATIBILITY: Legacy methods still work
-  async sendChange(
-    change: Omit<SyncChange, "operationId" | "timestamp" | "userId">
-  ): Promise<void> {
-    // Convert to operation
-    const operation = this.convertChangeToOperation(change);
-    return this.executeOperation(operation.name, operation.args);
-  }
-
-  private convertChangeToOperation(change: SyncChange): {
-    name: string;
-    args: any[];
-  } {
-    switch (change.type) {
-      case "upsert":
-        return {
-          name: `upsert${change.entityType}`,
-          args: [change.entityId, change.entity],
-        };
-      case "delete":
-        return {
-          name: `delete${change.entityType}`,
-          args: [change.entityId],
-        };
-    }
-  }
-
-  // New event handlers
+  // Event handlers
   onStatePatch(handler: (patch: StatePatch) => void): void {
     this.on("statePatch", handler);
   }
@@ -609,6 +506,67 @@ export class ModernSyncEngine extends NetworkSyncEngine {
 
   getCurrentStateVersion(): string {
     return this.currentStateVersion;
+  }
+
+  // Batch handling
+  private scheduleBatchSend(): void {
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+    }
+
+    this.batchTimeout = setTimeout(() => {
+      this.flushBatchedOperations();
+    }, 50); // Small delay to allow batching
+  }
+
+  private async flushBatchedOperations(): Promise<void> {
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
+    }
+
+    if (this.batchedOperations.length === 0) return;
+
+    const operations = [...this.batchedOperations];
+    this.batchedOperations = [];
+
+    try {
+      await this.pushOperations(operations);
+    } catch (error) {
+      // If push fails, add all operations back to queue
+      operations.forEach((op) => this.addToQueue(op));
+      throw error;
+    }
+  }
+
+  // Queue management
+  private addToQueue(operation: PendingOperation): void {
+    const queueLimit = this.config.offlineQueueLimit || 1000;
+    if (this.operationQueue.length >= queueLimit) {
+      // Remove oldest operation when queue is full
+      this.operationQueue.shift();
+    }
+    this.operationQueue.push(operation);
+  }
+
+  // Optimistic updates
+  private applyOptimisticUpdate(operation: PendingOperation): Entity[] {
+    // Implementation would depend on your store structure
+    return [];
+  }
+
+  // Utility methods
+  private generateOperationId(): number {
+    return Date.now();
+  }
+
+  private isOnline(): boolean {
+    return navigator.onLine !== false;
+  }
+
+  // Override parent's connected getter to reflect HTTP availability
+  get connected(): boolean {
+    return this.isOnline();
   }
 }
 ```
