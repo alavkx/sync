@@ -80,7 +80,7 @@ Todo | Project | Tag | User | Comment
 
 ```typescript
 // Create typed store with Zod schema
-const todoStore = KalphiteStore(EntitySchema);
+const todoStore = createKalphiteStore(EntitySchema);
 
 // Access typed collections
 todoStore.todo.upsert(id, todo); // Returns entity immediately

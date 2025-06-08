@@ -25,7 +25,7 @@ npm install @kalphite/sync-engine
 
 ```typescript
 import { z } from "zod";
-import { KalphiteStore } from "@kalphite/sync-engine";
+import { createKalphiteStore } from "@kalphite/sync-engine";
 
 // Define your schema
 const EntitySchema = z.discriminatedUnion("type", [
@@ -41,7 +41,7 @@ const EntitySchema = z.discriminatedUnion("type", [
 ]);
 
 // Create store
-const store = KalphiteStore(EntitySchema);
+const store = createKalphiteStore(EntitySchema);
 
 // Use the intuitive API
 const comments = store.comment; // Array-like access

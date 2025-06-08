@@ -54,8 +54,8 @@ The adapter provides:
 ### 3. KalphiteStore Integration
 
 ```typescript
-// Updated KalphiteStore to use Standard Schema
-const store = KalphiteStore(standardEntitySchema, {
+// Updated createKalphiteStore to use Standard Schema
+const store = createKalphiteStore(standardEntitySchema, {
   enableDevtools: true,
   logLevel: "info",
 });
@@ -74,7 +74,7 @@ Features:
 
 ```typescript
 import { z } from "zod";
-import { KalphiteStore } from "@kalphite/sync-engine";
+import { createKalphiteStore } from "@kalphite/sync-engine";
 import { ensureZodStandardSchema } from "@kalphite/sync-engine/adapters";
 
 // Define your schema
@@ -89,7 +89,7 @@ const userSchema = z.object({
 const standardSchema = ensureZodStandardSchema(userSchema);
 
 // Create store with validation
-const store = KalphiteStore(standardSchema);
+const store = createKalphiteStore(standardSchema);
 
 // Type-safe operations
 const user = store.upsert("user-1", {
@@ -124,19 +124,19 @@ import * as v from "valibot";
 const valibotSchema = v.object({
   /* ... */
 });
-const store1 = KalphiteStore(valibotSchema);
+const store1 = createKalphiteStore(valibotSchema);
 
 // Works with ArkType
 import { type } from "arktype";
 const arktypeSchema = type("string");
-const store2 = KalphiteStore(arktypeSchema);
+const store2 = createKalphiteStore(arktypeSchema);
 
 // Works with Effect Schema
 import * as S from "@effect/schema/Schema";
 const effectSchema = S.struct({
   /* ... */
 });
-const store3 = KalphiteStore(effectSchema);
+const store3 = createKalphiteStore(effectSchema);
 ```
 
 ## Technical Specifications
@@ -165,11 +165,11 @@ Kalphite enforces **synchronous validation only**:
 ```typescript
 // ✅ Allowed - Synchronous validation
 const syncSchema = createSyncSchema();
-const store = KalphiteStore(syncSchema);
+const store = createKalphiteStore(syncSchema);
 
 // ❌ Rejected - Async validation
 const asyncSchema = createAsyncSchema();
-const store = KalphiteStore(asyncSchema);
+const store = createKalphiteStore(asyncSchema);
 // Throws: "Kalphite requires synchronous validation"
 ```
 
@@ -234,7 +234,7 @@ When new libraries implement Standard Schema, no code changes needed:
 
 ```typescript
 // Your existing Kalphite code
-const store = KalphiteStore(anyStandardSchemaCompliantValidator);
+const store = createKalphiteStore(anyStandardSchemaCompliantValidator);
 // Works with Zod, Valibot, ArkType, Effect Schema, and future libraries
 ```
 

@@ -4,7 +4,7 @@
 
 ```typescript
 import { z } from "zod";
-import { KalphiteStore } from "@kalphite/sync-engine";
+import { createKalphiteStore } from "@kalphite/sync-engine";
 
 const EntitySchema = z.discriminatedUnion("type", [
   z.object({
@@ -15,7 +15,7 @@ const EntitySchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const store = KalphiteStore(EntitySchema);
+const store = createKalphiteStore(EntitySchema);
 
 // Add data
 store.comment.upsert("c1", {
@@ -112,13 +112,13 @@ store.comment.upsert(comment.id, {
 
 ```typescript
 import { describe, test, expect, beforeEach } from "vitest";
-import { KalphiteStore } from "@kalphite/sync-engine";
+import { createKalphiteStore } from "@kalphite/sync-engine";
 
 describe("My Feature", () => {
-  let store: ReturnType<typeof KalphiteStore>;
+  let store: ReturnType<typeof createKalphiteStore>;
 
   beforeEach(() => {
-    store = KalphiteStore(schema);
+    store = createKalphiteStore(schema);
   });
 
   test("adds comments", () => {
