@@ -1,5 +1,6 @@
 import type {
   ConfirmedOperation,
+  Entity,
   HttpClient,
   ModernSyncConfig,
   NotificationMessage,
@@ -23,6 +24,11 @@ export class ModernSyncEngine extends NetworkSyncEngine {
   private pendingOperations: Map<number, PendingOperation> = new Map();
   private modernOperationQueue: PendingOperation[] = [];
   private operationIdCounter: number = 0;
+  private batchSize: number;
+  private batchTimeout: NodeJS.Timeout | null = null;
+  private batchedOperations: PendingOperation[] = [];
+  private optimisticUpdates: Map<string, { entity: Entity; original: Entity }> =
+    new Map();
 
   constructor(config: ModernSyncConfig) {
     // Initialize parent with backward compatibility
@@ -35,6 +41,7 @@ export class ModernSyncEngine extends NetworkSyncEngine {
 
     this.modernConfig = config;
     this.httpClient = new HttpClientImpl(config);
+    this.batchSize = config.batchSize || 10;
   }
 
   async connect(): Promise<void> {
@@ -71,13 +78,16 @@ export class ModernSyncEngine extends NetworkSyncEngine {
 
     this.pendingOperations.set(operation.id, operation);
 
+    // Apply optimistic update
+    const affectedEntities = this.applyOptimisticUpdate(operation);
+
     if (this.isOnline()) {
-      try {
-        await this.pushOperations([operation]);
-      } catch (error) {
-        // Add back to queue for retry, respecting queue limits
-        this.addToQueue(operation);
-        throw error;
+      this.batchedOperations.push(operation);
+
+      if (this.batchedOperations.length >= this.batchSize) {
+        await this.flushBatchedOperations();
+      } else {
+        this.scheduleBatchSend();
       }
     } else {
       this.addToQueue(operation);
@@ -85,14 +95,42 @@ export class ModernSyncEngine extends NetworkSyncEngine {
   }
 
   private addToQueue(operation: PendingOperation): void {
-    const queueLimit = this.modernConfig.offlineQueueLimit;
-
-    if (queueLimit && this.modernOperationQueue.length >= queueLimit) {
-      // Remove oldest operation to make room
+    const queueLimit = this.modernConfig.offlineQueueLimit || 1000;
+    if (this.modernOperationQueue.length >= queueLimit) {
+      // Remove oldest operation when queue is full
       this.modernOperationQueue.shift();
     }
-
     this.modernOperationQueue.push(operation);
+  }
+
+  private scheduleBatchSend(): void {
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+    }
+
+    this.batchTimeout = setTimeout(() => {
+      this.flushBatchedOperations();
+    }, 50); // Small delay to allow batching
+  }
+
+  private async flushBatchedOperations(): Promise<void> {
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
+    }
+
+    if (this.batchedOperations.length === 0) return;
+
+    const operations = [...this.batchedOperations];
+    this.batchedOperations = [];
+
+    try {
+      await this.pushOperations(operations);
+    } catch (error) {
+      // If push fails, add all operations back to queue
+      operations.forEach((op) => this.addToQueue(op));
+      throw error;
+    }
   }
 
   async syncState(): Promise<void> {
@@ -124,14 +162,32 @@ export class ModernSyncEngine extends NetworkSyncEngine {
   }
 
   private async pushOperations(operations: PendingOperation[]): Promise<void> {
-    const response = await this.httpClient.post<
-      { operations: PendingOperation[] },
-      { confirmations: OperationConfirmation[] }
-    >(this.modernConfig.operationsEndpoint || "/sync/operations", {
-      operations,
-    });
+    const maxRetries = this.modernConfig.retryAttempts || 3;
+    const baseDelay = this.modernConfig.retryDelay || 1000;
 
-    this.handleOperationConfirmations(response.confirmations);
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await this.httpClient.post<
+          { operations: PendingOperation[] },
+          { confirmations: OperationConfirmation[] }
+        >(this.modernConfig.operationsEndpoint || "/sync/operations", {
+          operations,
+        });
+
+        await this.handleOperationConfirmations(response.confirmations);
+        return;
+      } catch (error) {
+        if (attempt === maxRetries - 1) {
+          // Last attempt failed, add to queue for later retry
+          operations.forEach((op) => this.addToQueue(op));
+          throw error;
+        }
+
+        // Wait with exponential backoff before retrying
+        const delay = baseDelay * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
   }
 
   private async flushOperationQueue(): Promise<void> {
@@ -154,29 +210,70 @@ export class ModernSyncEngine extends NetworkSyncEngine {
     }
   }
 
-  private handleOperationConfirmations(
+  private async handleOperationConfirmations(
     confirmations: OperationConfirmation[]
-  ): void {
+  ): Promise<void> {
     for (const confirmation of confirmations) {
-      const pendingOp = this.pendingOperations.get(confirmation.operationId);
+      const operation = this.pendingOperations.get(confirmation.operationId);
+      if (!operation) continue;
 
-      if (pendingOp) {
-        this.pendingOperations.delete(confirmation.operationId);
+      if (confirmation.success) {
+        // Operation succeeded, clear optimistic update
+        const [entityId] = operation.args;
+        this.optimisticUpdates.delete(entityId);
 
-        if (confirmation.success) {
-          const confirmedOp: ConfirmedOperation = {
-            ...pendingOp,
-            serverTimestamp: confirmation.serverTimestamp,
-          };
-          this.emit("operationConfirmed", confirmedOp);
-        } else {
-          this.emit("operationFailed", {
-            operation: pendingOp,
-            error: confirmation.error || "Unknown error",
-          });
+        const confirmedOp: ConfirmedOperation = {
+          ...operation,
+          serverTimestamp: confirmation.serverTimestamp,
+        };
+        this.emit("operationConfirmed", confirmedOp);
+      } else {
+        // Operation failed, rollback optimistic update
+        const [entityId] = operation.args;
+        const update = this.optimisticUpdates.get(entityId);
+        if (update) {
+          // Rollback to original state
+          this.rollbackOptimisticUpdate(entityId, update.original);
+          this.optimisticUpdates.delete(entityId);
         }
+
+        this.emit("operationFailed", {
+          operation,
+          error: confirmation.error || "Unknown error",
+        });
       }
+
+      this.pendingOperations.delete(confirmation.operationId);
     }
+  }
+
+  private applyOptimisticUpdate(operation: PendingOperation): Entity[] {
+    const affectedEntities: Entity[] = [];
+
+    // Simple optimistic update logic - can be extended based on operation type
+    switch (operation.name) {
+      case "upsert":
+        const [entityId, entity] = operation.args;
+        const original = this.getEntity(entityId);
+        if (original) {
+          this.optimisticUpdates.set(entityId, { entity, original });
+          affectedEntities.push(entity);
+        }
+        break;
+      case "delete":
+        const [id] = operation.args;
+        const existing = this.getEntity(id);
+        if (existing) {
+          this.optimisticUpdates.set(id, {
+            entity: { ...existing, deleted: true },
+            original: existing,
+          });
+          affectedEntities.push(existing);
+        }
+        break;
+    }
+
+    return affectedEntities;
   }
 
   private applyStatePatch(patch: StatePatch): void {
@@ -321,10 +418,8 @@ export class ModernSyncEngine extends NetworkSyncEngine {
 
   // Override/enhance parent methods
   async flush(): Promise<void> {
-    // Flush legacy queue first
+    await this.flushBatchedOperations();
     await super.flush();
-
-    // Then flush modern operation queue
     await this.flushOperationQueue();
   }
 
@@ -352,5 +447,21 @@ export class ModernSyncEngine extends NetworkSyncEngine {
   // Override parent's connected getter to reflect HTTP availability
   get connected(): boolean {
     return this.isOnline();
+  }
+
+  private getEntity(id: string): Entity | undefined {
+    // This would need to be implemented based on your store structure
+    return undefined; // Placeholder
+  }
+
+  private rollbackOptimisticUpdate(entityId: string, original: Entity): void {
+    // This would need to be implemented based on your store structure
+    // It should restore the entity to its original state
+  }
+
+  // Add method to get current optimistic state
+  getOptimisticState(entityId: string): Entity | undefined {
+    const update = this.optimisticUpdates.get(entityId);
+    return update?.entity;
   }
 }
