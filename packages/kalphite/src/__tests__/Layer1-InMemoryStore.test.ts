@@ -3,82 +3,97 @@ import { KalphiteStore } from "../store/KalphiteStore";
 import { createCommentEntity, createReviewEntity } from "./setup";
 
 describe("Layer 1: In-Memory Store", () => {
-  let store: KalphiteStore;
+  let store: any;
 
   beforeEach(() => {
-    store = new KalphiteStore();
+    store = KalphiteStore();
   });
 
   describe("Core Entity Operations", () => {
-    test("store.upsert() adds new entities correctly", () => {
+    test("array push adds new entities correctly", () => {
       const entity = createCommentEntity("comment-1", "Hello World");
 
-      store.upsert("comment-1", entity);
+      store.comment.push(entity);
 
-      const retrieved = store.getById("comment-1");
+      const retrieved = store.comment.find((e: any) => e.id === "comment-1");
       expect(retrieved).toEqual(entity);
     });
 
-    test("store.upsert() updates existing entities correctly", () => {
+    test("array operations update existing entities correctly", () => {
       const entity1 = createCommentEntity("comment-1", "Hello");
       const entity2 = createCommentEntity("comment-1", "Hello Updated");
 
-      store.upsert("comment-1", entity1);
-      store.upsert("comment-1", entity2);
+      store.comment.push(entity1);
 
-      const retrieved = store.getById("comment-1");
+      // Update by finding and replacing
+      const index = store.comment.findIndex((e: any) => e.id === "comment-1");
+      store.comment[index] = entity2;
+
+      const retrieved = store.comment.find((e: any) => e.id === "comment-1");
       expect(retrieved?.data.message).toBe("Hello Updated");
     });
 
-    test("store.getById() returns correct entity or undefined", () => {
+    test("array find returns correct entity or undefined", () => {
       const entity = createCommentEntity("comment-1", "Test");
-      store.upsert("comment-1", entity);
+      store.comment.push(entity);
 
-      expect(store.getById("comment-1")).toEqual(entity);
-      expect(store.getById("nonexistent")).toBeUndefined();
+      expect(store.comment.find((e: any) => e.id === "comment-1")).toEqual(
+        entity
+      );
+      expect(
+        store.comment.find((e: any) => e.id === "nonexistent")
+      ).toBeUndefined();
     });
 
-    test("store.getByType() filters entities by type correctly", () => {
+    test("type arrays filter entities by type correctly", () => {
       const comment1 = createCommentEntity("comment-1", "Comment 1");
       const comment2 = createCommentEntity("comment-2", "Comment 2");
       const review1 = createReviewEntity("review-1", "Review 1");
 
-      store.upsert("comment-1", comment1);
-      store.upsert("comment-2", comment2);
-      store.upsert("review-1", review1);
+      store.comment.push(comment1);
+      store.comment.push(comment2);
+      store.review.push(review1);
 
-      const comments = store.getByType("comment");
-      const reviews = store.getByType("review");
+      const comments = store.comment;
+      const reviews = store.review;
 
       expect(comments).toHaveLength(2);
       expect(reviews).toHaveLength(1);
-      expect(comments.every((c) => c.type === "comment")).toBe(true);
-      expect(reviews.every((r) => r.type === "review")).toBe(true);
+      expect(comments.every((c: any) => c.type === "comment")).toBe(true);
+      expect(reviews.every((r: any) => r.type === "review")).toBe(true);
     });
 
-    test("store.getAll() returns all entities", () => {
+    test("arrays contain all entities of their type", () => {
       const comment = createCommentEntity("comment-1", "Comment");
       const review = createReviewEntity("review-1", "Review");
 
-      store.upsert("comment-1", comment);
-      store.upsert("review-1", review);
+      store.comment.push(comment);
+      store.review.push(review);
 
-      const all = store.getAll();
-      expect(all).toHaveLength(2);
-      expect(all).toContain(comment);
-      expect(all).toContain(review);
+      const allComments = store.comment;
+      const allReviews = store.review;
+
+      expect(allComments).toHaveLength(1);
+      expect(allReviews).toHaveLength(1);
+      // Check by ID since entities get wrapped in proxies
+      expect(allComments[0].id).toBe(comment.id);
+      expect(allReviews[0].id).toBe(review.id);
     });
 
     test("store.clear() removes all entities", () => {
-      store.upsert("comment-1", createCommentEntity("comment-1", "Test"));
-      store.upsert("review-1", createReviewEntity("review-1", "Test"));
+      store.comment.push(createCommentEntity("comment-1", "Test"));
+      store.review.push(createReviewEntity("review-1", "Test"));
 
-      expect(store.getAll()).toHaveLength(2);
+      expect(store.comment).toHaveLength(1);
+      expect(store.review).toHaveLength(1);
 
       store.clear();
 
-      expect(store.getAll()).toHaveLength(0);
-      expect(store.getById("comment-1")).toBeUndefined();
+      expect(store.comment).toHaveLength(0);
+      expect(store.review).toHaveLength(0);
+      expect(
+        store.comment.find((e: any) => e.id === "comment-1")
+      ).toBeUndefined();
     });
   });
 
@@ -92,9 +107,8 @@ describe("Layer 1: In-Memory Store", () => {
 
       store.loadEntities(entities);
 
-      expect(store.getAll()).toHaveLength(3);
-      expect(store.getByType("comment")).toHaveLength(2);
-      expect(store.getByType("review")).toHaveLength(1);
+      expect(store.comment).toHaveLength(2);
+      expect(store.review).toHaveLength(1);
     });
   });
 
@@ -106,15 +120,15 @@ describe("Layer 1: In-Memory Store", () => {
         notificationCount++;
       });
 
-      store.upsert("comment-1", createCommentEntity("comment-1", "Test"));
+      store.comment.push(createCommentEntity("comment-1", "Test"));
       expect(notificationCount).toBe(1);
 
-      store.upsert("comment-2", createCommentEntity("comment-2", "Test2"));
+      store.comment.push(createCommentEntity("comment-2", "Test2"));
       expect(notificationCount).toBe(2);
 
       unsubscribe();
 
-      store.upsert("comment-3", createCommentEntity("comment-3", "Test3"));
+      store.comment.push(createCommentEntity("comment-3", "Test3"));
       expect(notificationCount).toBe(2); // Should not increase after unsubscribe
     });
 
@@ -125,13 +139,13 @@ describe("Layer 1: In-Memory Store", () => {
       const unsub1 = store.subscribe(() => count1++);
       const unsub2 = store.subscribe(() => count2++);
 
-      store.upsert("comment-1", createCommentEntity("comment-1", "Test"));
+      store.comment.push(createCommentEntity("comment-1", "Test"));
       expect(count1).toBe(1);
       expect(count2).toBe(1);
 
       unsub1();
 
-      store.upsert("comment-2", createCommentEntity("comment-2", "Test2"));
+      store.comment.push(createCommentEntity("comment-2", "Test2"));
       expect(count1).toBe(1); // Should not increase
       expect(count2).toBe(2); // Should increase
 
@@ -167,7 +181,7 @@ describe("Layer 1: In-Memory Store", () => {
       store.loadEntities(entities);
       const loadTime = performance.now() - startTime;
 
-      expect(store.getAll()).toHaveLength(entityCount);
+      expect(store.comment).toHaveLength(entityCount);
       expect(loadTime).toBeLessThan(50); // Should load 1000 entities in under 50ms
     });
 
@@ -179,18 +193,18 @@ describe("Layer 1: In-Memory Store", () => {
 
       store.loadEntities(entities);
 
-      // Test getById performance
-      const getByIdStart = performance.now();
-      store.getById("comment-5000");
-      const getByIdTime = performance.now() - getByIdStart;
-      expect(getByIdTime).toBeLessThan(1); // Should be sub-millisecond
+      // Test find performance
+      const findStart = performance.now();
+      store.comment.find((e: any) => e.id === "comment-5000");
+      const findTime = performance.now() - findStart;
+      expect(findTime).toBeLessThan(1); // Should be sub-millisecond
 
-      // Test getByType performance
-      const getByTypeStart = performance.now();
-      const comments = store.getByType("comment");
-      const getByTypeTime = performance.now() - getByTypeStart;
+      // Test array access performance
+      const arrayAccessStart = performance.now();
+      const comments = store.comment;
+      const arrayAccessTime = performance.now() - arrayAccessStart;
       expect(comments).toHaveLength(entityCount);
-      expect(getByTypeTime).toBeLessThan(10); // Should complete in under 10ms
+      expect(arrayAccessTime).toBeLessThan(10); // Should complete in under 10ms
     });
   });
 
@@ -199,28 +213,29 @@ describe("Layer 1: In-Memory Store", () => {
       const testEntity = createCommentEntity("", "Test");
 
       expect(() => {
-        store.upsert("", testEntity);
+        store.comment.push(testEntity);
       }).not.toThrow();
 
-      expect(store.getById("")).toEqual(testEntity);
+      expect(store.comment.find((e: any) => e.id === "")).toEqual(testEntity);
     });
 
     test("handles duplicate entity IDs correctly", () => {
       const entity1 = createCommentEntity("duplicate", "First");
       const entity2 = createCommentEntity("duplicate", "Second");
 
-      store.upsert("duplicate", entity1);
-      store.upsert("duplicate", entity2);
+      store.comment.push(entity1);
+      store.comment.push(entity2);
 
-      const retrieved = store.getById("duplicate");
-      expect(retrieved?.data.message).toBe("Second");
+      // Should have both entities (arrays allow duplicates)
+      const retrieved = store.comment.filter((e: any) => e.id === "duplicate");
+      expect(retrieved).toHaveLength(2);
     });
 
     test("handles empty type filtering", () => {
-      store.upsert("comment-1", createCommentEntity("comment-1", "Test"));
+      store.comment.push(createCommentEntity("comment-1", "Test"));
 
-      const emptyResults = store.getByType("nonexistent-type");
-      expect(emptyResults).toEqual([]);
+      const emptyResults = store.nonexistent || [];
+      expect(emptyResults).toHaveLength(0);
     });
   });
 });

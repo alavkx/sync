@@ -1,18 +1,16 @@
 import type { KalphiteConfig } from "../types/config";
-import type { EntityId, EntityType } from "../types/entity";
-import { TypedCollection } from "./TypedCollection";
-
+import type { EntityId } from "../types/entity";
 import type { StandardSchemaV1 } from "../types/StandardSchema";
 
-// Use the official Standard Schema type inference
 type InferOutput<T extends StandardSchemaV1> = StandardSchemaV1.InferOutput<T>;
 
 class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
-  public _entities = new Map<EntityId, InferOutput<TSchema>>();
+  private entities = new Map<EntityId, InferOutput<TSchema>>();
   private subscribers = new Set<() => void>();
   private schema?: TSchema;
   private config: KalphiteConfig;
-  private typeCollections = new Map<string, TypedCollection>();
+  private typeArrays = new Map<string, any[]>();
+  private suppressNotifications = false;
 
   constructor(schema?: TSchema, config: KalphiteConfig = {}) {
     this.schema = schema;
@@ -27,85 +25,288 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
     };
   }
 
-  // Type-safe upsert with schema validation (memory-first: synchronous only)
-  upsert(entityId: EntityId, entity: unknown): InferOutput<TSchema> {
-    if (this.schema) {
-      const result = this.schema["~standard"].validate(entity);
-
-      // Kalphite requires synchronous validation for memory-first operations
-      if (result instanceof Promise) {
-        throw new Error(
-          "Kalphite requires synchronous validation. Async schemas are not supported in memory-first operations."
-        );
-      }
-
-      // Handle validation failure
-      if (result.issues) {
-        throw new Error(`Validation failed: ${JSON.stringify(result.issues)}`);
-      }
-
-      const validatedEntity = result.value as InferOutput<TSchema>;
-      this.setEntity(entityId, validatedEntity);
-      return validatedEntity;
-    } else {
-      // No schema validation - direct set
-      const typedEntity = entity as InferOutput<TSchema>;
-      this.setEntity(entityId, typedEntity);
-      return typedEntity;
-    }
-  }
-
-  // Direct entity setting with change tracking
-  private setEntity(entityId: EntityId, entity: InferOutput<TSchema>): void {
-    this._entities.set(entityId, entity);
-
-    // Invalidate cached type collections
-    this.typeCollections.clear();
-
-    this.notifySubscribers();
-    this.scheduleFlush(entityId, entity);
-  }
-
-  // Fast synchronous read operations
-  getById(id: EntityId): InferOutput<TSchema> | undefined {
-    return this._entities.get(id);
-  }
-
-  getByType(type: EntityType): InferOutput<TSchema>[] {
-    return Array.from(this._entities.values()).filter(
+  // Create a reactive array for a specific entity type
+  private createReactiveArray(type: string): any[] {
+    // Get entities of this type
+    const entities = Array.from(this.entities.values()).filter(
       (entity) => entity && (entity as any).type === type
     );
-  }
 
-  getAll(): InferOutput<TSchema>[] {
-    return Array.from(this._entities.values());
-  }
+    // Create proxied entities that trigger updates on property changes
+    const proxiedEntities = entities.map((entity) =>
+      this.createEntityProxy(entity)
+    );
 
-  // NEW API: Get typed collection for a specific entity type
-  getTypeCollection(type: string): TypedCollection {
-    if (!this.typeCollections.has(type)) {
-      const entities = this.getByType(type);
-      const collection = new TypedCollection(type, this, entities);
-      this.typeCollections.set(type, collection);
-    }
-    return this.typeCollections.get(type)!;
-  }
+    // Create array proxy that intercepts array mutations
+    return new Proxy(proxiedEntities, {
+      set: (target, prop, value) => {
+        if (prop === "length") {
+          (target as any)[prop] = value;
+          return true;
+        }
 
-  // Bulk operations
-  loadEntities(entities: InferOutput<TSchema>[]): void {
-    entities.forEach((entity) => {
-      this._entities.set((entity as any).id, entity);
+        const index = Number(prop);
+        if (Number.isInteger(index)) {
+          // Setting array element: array[0] = newEntity
+          if (value && typeof value === "object") {
+            // Ensure the entity has the correct type
+            const entityWithType = { ...value, type };
+
+            // Validate if schema exists
+            if (this.schema) {
+              const result = this.schema["~standard"].validate(entityWithType);
+              if (result instanceof Promise) {
+                throw new Error("Async validation not supported");
+              }
+              if (result.issues) {
+                throw new Error(
+                  `Validation failed: ${JSON.stringify(result.issues)}`
+                );
+              }
+              value = result.value;
+            }
+
+            // Create proxy for the new entity
+            const proxiedEntity = this.createEntityProxy(entityWithType);
+            target[index] = proxiedEntity;
+
+            // Update entities map if entity has id
+            if (entityWithType.id) {
+              this.entities.set(entityWithType.id, entityWithType);
+            }
+
+            // Only notify subscribers, don't invalidate arrays
+            this.notifySubscribers();
+            return true;
+          }
+        }
+
+        (target as any)[prop] = value;
+        return true;
+      },
+
+      get: (target, prop) => {
+        // Intercept array methods that modify the array
+        if (prop === "push") {
+          return (...items: any[]) => {
+            const processedItems = items.map((item) => {
+              // Ensure type is set
+              const entityWithType = { ...item, type };
+
+              // Validate if schema exists
+              if (this.schema) {
+                const result =
+                  this.schema["~standard"].validate(entityWithType);
+                if (result instanceof Promise) {
+                  throw new Error("Async validation not supported");
+                }
+                if (result.issues) {
+                  throw new Error(
+                    `Validation failed: ${JSON.stringify(result.issues)}`
+                  );
+                }
+                return this.createEntityProxy(result.value);
+              }
+
+              // Update entities map if entity has id
+              if (entityWithType.id) {
+                this.entities.set(entityWithType.id, entityWithType);
+              }
+
+              return this.createEntityProxy(entityWithType);
+            });
+
+            const result = target.push(...processedItems);
+            // Only notify subscribers, don't invalidate arrays
+            this.notifySubscribers();
+            return result;
+          };
+        }
+
+        if (prop === "splice") {
+          return (start: number, deleteCount?: number, ...items: any[]) => {
+            // Handle deletions
+            if (deleteCount && deleteCount > 0) {
+              const deleted = target.slice(start, start + deleteCount);
+              deleted.forEach((entity) => {
+                if (entity.id) {
+                  this.entities.delete(entity.id);
+                }
+              });
+            }
+
+            // Handle insertions
+            const processedItems = items.map((item) => {
+              const entityWithType = { ...item, type };
+              if (this.schema) {
+                const result =
+                  this.schema["~standard"].validate(entityWithType);
+                if (result instanceof Promise) {
+                  throw new Error("Async validation not supported");
+                }
+                if (result.issues) {
+                  throw new Error(
+                    `Validation failed: ${JSON.stringify(result.issues)}`
+                  );
+                }
+                const validatedEntity = result.value as InferOutput<TSchema>;
+                if ((validatedEntity as any).id) {
+                  this.entities.set(
+                    (validatedEntity as any).id,
+                    validatedEntity
+                  );
+                }
+                return this.createEntityProxy(validatedEntity);
+              }
+
+              if (entityWithType.id) {
+                this.entities.set(entityWithType.id, entityWithType);
+              }
+
+              return this.createEntityProxy(entityWithType);
+            });
+
+            // Perform the actual splice on the target array
+            const result = target.splice(
+              start,
+              deleteCount ?? 0,
+              ...processedItems
+            );
+
+            // Only notify subscribers, don't invalidate arrays
+            this.notifySubscribers();
+            return result;
+          };
+        }
+
+        // Other array methods that don't modify the array can pass through
+        const value = (target as any)[prop];
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
     });
+  }
 
-    // Invalidate cached type collections
-    this.typeCollections.clear();
+  // Create a proxy for individual entities to track property changes
+  private createEntityProxy(entity: any): any {
+    return new Proxy(entity, {
+      set: (target, prop, value) => {
+        (target as any)[prop] = value;
 
-    this.notifySubscribers();
+        // Update in entities map if this has an id
+        if (target.id) {
+          this.entities.set(target.id, target);
+        }
+
+        // Don't invalidate arrays on individual property changes
+        this.notifySubscribers();
+        return true;
+      },
+      get: (target, prop) => {
+        const value = (target as any)[prop];
+
+        // If the property is an object (like 'data'), wrap it in a proxy too
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          return new Proxy(value, {
+            set: (nestedTarget, nestedProp, nestedValue) => {
+              (nestedTarget as any)[nestedProp] = nestedValue;
+
+              // Update in entities map if parent has an id
+              if (target.id) {
+                this.entities.set(target.id, target);
+              }
+
+              // Don't invalidate arrays on nested property changes
+              this.notifySubscribers();
+              return true;
+            },
+          });
+        }
+
+        return value;
+      },
+    });
+  }
+
+  // Invalidate cached type arrays
+  private invalidateTypeArrays(): void {
+    this.typeArrays.clear();
+  }
+
+  // Refresh all type arrays by rebuilding them from entities
+  private refreshTypeArrays(): void {
+    this.typeArrays.forEach((array, type) => {
+      // Get current entities of this type
+      const currentEntities = Array.from(this.entities.values()).filter(
+        (entity) => entity && (entity as any).type === type
+      );
+
+      // Clear and repopulate the existing array
+      array.length = 0;
+      const proxiedEntities = currentEntities.map((entity) =>
+        this.createEntityProxy(entity)
+      );
+      array.push(...proxiedEntities);
+    });
+  }
+
+  // Get reactive array for a specific type
+  getTypeArray(type: string): any[] {
+    if (!this.typeArrays.has(type)) {
+      const reactiveArray = this.createReactiveArray(type);
+      this.typeArrays.set(type, reactiveArray);
+    }
+    return this.typeArrays.get(type)!;
   }
 
   clear(): void {
-    this._entities.clear();
-    this.typeCollections.clear();
+    this.entities.clear();
+    this.typeArrays.clear();
+    this.notifySubscribers();
+  }
+
+  loadEntities(entities: InferOutput<TSchema>[]): void {
+    // Suppress notifications during bulk operation
+    this.suppressNotifications = true;
+
+    try {
+      // Group entities by type to minimize array operations
+      const entitiesByType = new Map<string, any[]>();
+
+      entities.forEach((entity) => {
+        this.entities.set((entity as any).id, entity);
+
+        const entityType = (entity as any).type;
+        if (entityType) {
+          if (!entitiesByType.has(entityType)) {
+            entitiesByType.set(entityType, []);
+          }
+          entitiesByType.get(entityType)!.push(entity);
+        }
+      });
+
+      // Update type arrays in bulk
+      entitiesByType.forEach((typeEntities, entityType) => {
+        const typeArray = this.getTypeArray(entityType);
+        typeEntities.forEach((entity) => {
+          const existingIndex = typeArray.findIndex(
+            (e: any) => e.id === (entity as any).id
+          );
+          if (existingIndex >= 0) {
+            typeArray[existingIndex] = this.createEntityProxy(entity);
+          } else {
+            typeArray.push(this.createEntityProxy(entity));
+          }
+        });
+      });
+    } finally {
+      // Re-enable notifications
+      this.suppressNotifications = false;
+    }
+
+    // Single notification for the entire bulk operation
     this.notifySubscribers();
   }
 
@@ -115,38 +316,25 @@ class KalphiteStoreImpl<TSchema extends StandardSchemaV1 = any> {
     return () => this.subscribers.delete(callback);
   };
 
-  notifySubscribers(): void {
-    this.subscribers.forEach((callback) => callback());
-  }
+  private notifySubscribers(): void {
+    if (this.suppressNotifications) return;
 
-  // Placeholder for flush scheduling (would integrate with MemoryFlushEngine)
-  private scheduleFlush(
-    entityId: EntityId,
-    entity: InferOutput<TSchema>
-  ): void {
-    // This would trigger the memory flush engine
-    if (this.config.enableDevtools) {
-      this.log("debug", `Scheduled flush for entity ${entityId}`);
-    }
-  }
-
-  // Logging utility
-  private log(level: string, ...args: any[]): void {
-    const levels = ["debug", "info", "warn", "error", "silent"];
-    const configLevel = this.config.logLevel || "info";
-
-    if (levels.indexOf(level) >= levels.indexOf(configLevel)) {
-      const logFn = console[level as keyof Console] as (...args: any[]) => void;
-      logFn?.(...args);
-    }
+    this.subscribers.forEach((callback) => {
+      try {
+        callback();
+      } catch (error) {
+        // Isolate subscriber errors - don't let one bad subscriber crash everything
+        console.warn("Subscriber error:", error);
+      }
+    });
   }
 }
 
-// Export a Proxy-wrapped store that provides dynamic property access
+// Export a Proxy-wrapped store that provides dynamic array access
 export function KalphiteStore<TSchema extends StandardSchemaV1 = any>(
   schema?: TSchema,
   config: KalphiteConfig = {}
-): KalphiteStoreImpl<TSchema> & Record<string, TypedCollection> {
+): KalphiteStoreImpl<TSchema> & Record<string, any[]> {
   const store = new KalphiteStoreImpl(schema, config);
 
   return new Proxy(store, {
@@ -156,12 +344,17 @@ export function KalphiteStore<TSchema extends StandardSchemaV1 = any>(
         return (target as any)[prop];
       }
 
-      // If it's a string property (entity type), return a TypedCollection
+      // If it's a string property (entity type), return a reactive array
       if (typeof prop === "string") {
-        return target.getTypeCollection(prop);
+        // Convert singular to plural for common types
+        let type = prop;
+        if (prop.endsWith("s")) {
+          type = prop.slice(0, -1); // "comments" -> "comment"
+        }
+        return target.getTypeArray(type);
       }
 
       return undefined;
     },
-  }) as KalphiteStoreImpl<TSchema> & Record<string, TypedCollection>;
+  }) as KalphiteStoreImpl<TSchema> & Record<string, any[]>;
 }
