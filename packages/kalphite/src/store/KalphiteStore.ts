@@ -16,7 +16,7 @@ export class KalphiteStore<
   protected typeArrays = new Map<string, InferOutput<TSchema>[]>();
   private subscribers = new Set<() => void>();
   private schema?: TSchema;
-  private config: KalphiteConfig;
+  private __config: KalphiteConfig;
   private flushEngine?: FlushEngine<InferOutput<TSchema>>;
   private suppressNotifications = false;
   private nestedProxyCache = new WeakMap<object, any>();
@@ -27,7 +27,7 @@ export class KalphiteStore<
 
   constructor(schema?: TSchema, config: KalphiteConfig = {}) {
     this.schema = schema;
-    this.config = config;
+    this.__config = config;
     this.flushEngine = config.flushEngine;
   }
 
@@ -393,7 +393,7 @@ export class KalphiteStore<
   }
 
   // Refresh all type arrays by rebuilding them from entities
-  private refreshTypeArrays(): void {
+  private _refreshTypeArrays(): void {
     this.invalidateTypeArrays();
     for (const entity of this.entities.values()) {
       const type = (entity as Entity).type;

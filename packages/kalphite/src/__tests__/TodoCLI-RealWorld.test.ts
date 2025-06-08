@@ -487,8 +487,9 @@ describe("Real-World Example: Todo CLI Application", () => {
       const highPriorityIncomplete = store.todo.filter(
         (t: any) => t.data.priority === "high" && !t.data.completed
       );
-      const _recentProjects = store.project.slice(0, 5);
-      const _popularTags = store.tag.slice(0, 10);
+      // Performance tracking (for demonstration)
+      // const _recentProjects = store.project.slice(0, 5);
+      // const _popularTags = store.tag.slice(0, 10);
 
       const queryTime = performance.now() - queryStart;
 

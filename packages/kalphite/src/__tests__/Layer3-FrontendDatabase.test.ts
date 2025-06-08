@@ -316,7 +316,7 @@ describe("Layer 3: Frontend Database", () => {
       });
 
       // Attempting to delete referenced review should either fail or cascade
-      const result = await db.delete("review", "r1");
+      await db.delete("review", "r1");
 
       // Either the delete failed (referential integrity enforced)
       // or the comment was also deleted (cascade)

@@ -19,7 +19,7 @@ describe("Layer 1: Advanced Edge Cases", () => {
     const result = store.getById(comment.id);
     expect(result).toBeDefined();
     if (result) {
-      expect(result.data.score).toBe(0);
+      expect((result as any).data.score).toBe(0);
     }
   });
 

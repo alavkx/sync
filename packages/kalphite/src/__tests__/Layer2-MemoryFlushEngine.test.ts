@@ -352,49 +352,54 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
 
     test("should flush entities when batch size is reached", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const _store = createKalphiteStore(undefined, {
-        flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
-      });
+      // Store created but not used in this placeholder test
+      // createKalphiteStore(undefined, {
+      //   flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
+      // });
 
       // ... rest of test
     });
 
     test("should handle flush errors gracefully", async () => {
-      const _store = createKalphiteStore();
+      // Store created but not used in this placeholder test
+      // createKalphiteStore();
       // ... rest of test
     });
 
     test("should batch multiple operations efficiently", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const store = createKalphiteStore(undefined, {
-        flushEngine: new MemoryFlushEngine({
-          flushTarget: mockFlushTarget,
-          maxBatchSize: 3,
-          debounceMs: 50,
-        }),
-      });
+      // Store created but not used in this placeholder test
+      // createKalphiteStore(undefined, {
+      //   flushEngine: new MemoryFlushEngine({
+      //     flushTarget: mockFlushTarget,
+      //     maxBatchSize: 3,
+      //     debounceMs: 50,
+      //   }),
+      // });
 
       // ... rest of test
     });
 
     test("should handle concurrent operations", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const store = createKalphiteStore(undefined, {
-        flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
-      });
+      // Store created but not used in this placeholder test
+      // createKalphiteStore(undefined, {
+      //   flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
+      // });
 
       // ... rest of test
     });
 
     test("should respect flush delay", async () => {
       const mockFlushTarget = vi.fn().mockResolvedValue(undefined);
-      const store = createKalphiteStore(undefined, {
-        flushEngine: new MemoryFlushEngine({
-          flushTarget: mockFlushTarget,
-          maxBatchSize: 5,
-          debounceMs: 100,
-        }),
-      });
+      // Store created but not used in this placeholder test
+      // createKalphiteStore(undefined, {
+      //   flushEngine: new MemoryFlushEngine({
+      //     flushTarget: mockFlushTarget,
+      //     maxBatchSize: 5,
+      //     debounceMs: 100,
+      //   }),
+      // });
 
       // ... rest of test
     });
@@ -602,13 +607,14 @@ describe("Layer 2: Memory Flush Engine Implementation", () => {
     });
   });
 
-  it("should handle flush target errors gracefully", async () => {
+  test("should handle flush target errors gracefully", async () => {
     const mockFlushTarget = vi
       .fn()
       .mockRejectedValue(new Error("Flush failed"));
-    const store = createKalphiteStore(undefined, {
-      flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
-    });
+    // Store created but not used in this placeholder test
+    // createKalphiteStore(undefined, {
+    //   flushEngine: new MemoryFlushEngine({ flushTarget: mockFlushTarget }),
+    // });
     // Test implementation...
   });
 });

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { setGlobalStore } from "../react/useKalphiteStore";
 
 // Test schema for Layer 5 tests
-const TestEntitySchema = z.object({
+const __TestEntitySchema = z.object({
   id: z.string(),
   type: z.literal("test"),
   data: z.object({
@@ -11,7 +11,7 @@ const TestEntitySchema = z.object({
   }),
 });
 
-type TestEntity = z.infer<typeof TestEntitySchema>;
+// type TestEntity = z.infer<typeof TestEntitySchema>;
 
 describe("Layer 5: React Integration", () => {
   beforeEach(() => {

@@ -638,7 +638,7 @@ describe("Integration: Advanced Patterns", () => {
   });
 
   describe("Advanced Features", () => {
-    it("should handle large datasets", () => {
+    test("should handle large datasets", () => {
       const largeDataSets: Entity[] = [];
 
       // Add test data

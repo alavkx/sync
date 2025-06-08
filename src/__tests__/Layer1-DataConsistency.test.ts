@@ -180,7 +180,7 @@ describe("Layer 1: Data Consistency & Integrity", () => {
       expect(
         store.comment.find((c: any) => c.id === "cleanup-0")
       ).toBeUndefined();
-      expect(store.comment.filter((c: any) => true)).toHaveLength(0);
+      expect(store.comment.filter((_c: any) => true)).toHaveLength(0);
 
       // Store should be fully functional after clear
       store.comment.push(createCommentEntity("post-clear", "After clear"));

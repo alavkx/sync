@@ -4,10 +4,10 @@ import type { Entity, EntityId } from "../types/entity";
 
 export class FrontendDatabase {
   private pool: Pool;
-  private config: FrontendDatabaseConfig;
+  private __config: FrontendDatabaseConfig;
 
   constructor(config: FrontendDatabaseConfig) {
-    this.config = config;
+    this.__config = config;
     this.pool = new Pool({
       connectionString: config.connectionString,
     });

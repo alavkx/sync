@@ -120,7 +120,7 @@ describe("Todo CLI: Sync Integration", () => {
   });
 
   beforeEach(() => {
-    store = createKalphiteStore(undefined, { syncConfig: config });
+    store = createKalphiteStore(undefined, { syncConfig: config } as any);
     syncEngine = new OperationSyncEngine(config);
     mockHttpClient = new MockHttpClient();
 
@@ -432,7 +432,7 @@ describe("Todo CLI: Sync Integration", () => {
     });
   });
 
-  it("should handle sync configuration", () => {
+  test("should handle sync configuration", () => {
     const config: OperationSyncConfig = {
       baseUrl: "http://localhost:3000",
       operationsEndpoint: "/sync/operations",
@@ -446,7 +446,7 @@ describe("Todo CLI: Sync Integration", () => {
       offlineQueueLimit: 1000,
     };
 
-    const store = createKalphiteStore(undefined, { syncConfig: config });
+    const store = createKalphiteStore(undefined, { syncConfig: config } as any);
     expect(store).toBeDefined();
   });
 });
