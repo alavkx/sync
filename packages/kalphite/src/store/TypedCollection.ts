@@ -15,12 +15,15 @@ export class TypedCollection<T = any> extends Array<T> {
   }
 
   // Mutation methods specific to this entity type
-  upsert(entityId: EntityId, entity: T): void {
+  upsert(entityId: EntityId, entity: T): T {
     // Delegate to store's upsert method
     this.store.upsert(entityId, entity);
 
     // Update our local array representation
     this.refresh();
+
+    // Return the entity for functional chaining
+    return entity;
   }
 
   delete(entityId: EntityId): boolean {
@@ -46,6 +49,23 @@ export class TypedCollection<T = any> extends Array<T> {
     // Get fresh data from store
     const entities = this.store.getByType(this.entityType);
     this.push(...entities);
+  }
+
+  // Query methods for functional programming style
+  findById(id: EntityId): T | undefined {
+    return this.find((entity: any) => entity?.id === id);
+  }
+
+  where(predicate: (entity: T) => boolean): T[] {
+    return this.filter(predicate);
+  }
+
+  orderBy(keySelector: (entity: T) => any): T[] {
+    return [...this].sort((a, b) => {
+      const aKey = keySelector(a);
+      const bKey = keySelector(b);
+      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+    });
   }
 
   // Override toJSON for serialization
