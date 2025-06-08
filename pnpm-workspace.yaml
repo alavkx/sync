@@ -1,4 +1,8 @@
+packages:
+  - "packages/kalphite"
+  - "packages/code-review-app"
+
 onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - '@tailwindcss/oxide'
+  - "@parcel/watcher"
+  - "@tailwindcss/oxide"
   - esbuild

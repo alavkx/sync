@@ -1,38 +1,29 @@
-# Sync Engine Documentation Index
+# Kalphite Sync Engine Documentation
 
-## 📋 Current Documentation Status
+## 📋 Documentation
 
-### ✅ **Master Document (Start Here)**
-
-- **[memory-first-sync-master.md](./memory-first-sync-master.md)** - Complete architecture guide with all current patterns
-
-### 📚 **Reference Documents (Historical)**
-
-- **[memory-first-sync.md](./memory-first-sync.md)** - ⚠️ Superseded by master doc
-- **[react-integration.md](./react-integration.md)** - ⚠️ Superseded by master doc
-- **[storage-design.md](./storage-design.md)** - ⚠️ Contains outdated database-heavy approach
-- **[api-design-update.md](./api-design-update.md)** - ⚠️ Contains outdated complex API patterns
-
-### 📖 **Learning Context (Still Relevant)**
-
-- **[module1.md](./module1.md)** - Original sync engine learning goals
-- **[module1-retrospective.md](./module1-retrospective.md)** - Lessons learned from complex approach
-- **[module2.md](./module2.md)** - Advanced patterns (for future reference)
+- **[memory-first-sync-master.md](./memory-first-sync-master.md)** - Complete architecture guide with schema strategy and implementation patterns
 - **[prd.md](./prd.md)** - Original code review app requirements
 
 ## 🎯 **Quick Start**
 
 1. **Read**: [memory-first-sync-master.md](./memory-first-sync-master.md) for complete architecture
-2. **Understand**: The 4-layer design and radical simplification philosophy
-3. **Implement**: Follow the implementation guide in the master doc
+2. **Understand**: The schema-agnostic approach with Standard Schema integration
+3. **Implement**: Follow the implementation guide with your preferred schema library
 
-## 🚀 **Key Architectural Decisions**
+## 🚀 **Key Features**
+
+### Schema-Agnostic Design
+
+- **Standard Schema Integration**: Use any compliant schema library (Zod, Valibot, ArkType, etc.)
+- **Type Safety Everywhere**: Full TypeScript inference from user's schema
+- **Zero Lock-in**: Kalphite doesn't dictate validation approach
 
 ### Memory-First Approach
 
 - All data lives in memory for synchronous access
 - Background persistence with automatic flushing
-- Single `useMemoryStore()` hook for all React components
+- Single `useKalphiteStore()` hook for all React components
 
 ### Radical Simplification
 
@@ -42,27 +33,20 @@
 
 ### 4-Layer Architecture
 
-1. **Hot**: In-Memory Store (RAM)
+1. **Hot**: In-Memory Store (RAM) with schema validation
 2. **Warm**: Memory Flush Engine (Memory → Disk)
 3. **Cool**: Frontend Database (PGlite + IndexedDB)
 4. **Cold**: Network Sync Engine (Server communication)
 
-## 📈 **Evolution Summary**
+## 📈 **Philosophy**
 
-1. **Started**: Complex database-heavy sync engine with async everywhere
-2. **Learned**: Async complexity makes learning difficult
-3. **Simplified**: Memory-first with synchronous operations
-4. **Radically Simplified**: Single hook, global re-renders, maximum simplicity
+Kalphite represents a radical simplification of traditional sync engines by embracing trade-offs (performance for simplicity) to create dramatically better developer experience. The result is a sync engine that's **simple, predictable, type-safe, and impossible to get wrong** - perfect for learning, prototyping, and building real applications where "fast enough" is good enough.
 
-The journey shows how **embracing trade-offs** (performance for simplicity) can create dramatically better developer experience for learning and prototyping scenarios.
+## 🔄 **Future Enhancements**
 
-## 🔄 **What's Next**
-
-The master document contains everything needed to implement our memory-first sync engine. Future work could explore:
+The master document contains everything needed to implement Kalphite with your preferred schema library. Future work could explore:
 
 - Performance optimizations (when needed)
 - Real-time WebSocket integration
 - Advanced conflict resolution strategies
 - Mobile/offline-first enhancements
-
-But for learning sync engines, the current approach is **perfect** - simple, predictable, and impossible to get wrong! 🎉

@@ -5,15 +5,16 @@
 ## Table of Contents
 
 1. [Core Philosophy](#core-philosophy)
-2. [Architecture Overview](#architecture-overview)
-3. [Layer 1: In-Memory Store](#layer-1-in-memory-store)
-4. [Layer 2: Memory Flush Engine](#layer-2-memory-flush-engine)
-5. [Layer 3: Frontend Database](#layer-3-frontend-database)
-6. [Layer 4: Network Sync Engine](#layer-4-network-sync-engine)
-7. [React Integration](#react-integration)
-8. [Implementation Guide](#implementation-guide)
-9. [Usage Examples](#usage-examples)
-10. [Trade-offs & Benefits](#trade-offs--benefits)
+2. [Schema Strategy](#schema-strategy)
+3. [Architecture Overview](#architecture-overview)
+4. [Layer 1: In-Memory Store](#layer-1-in-memory-store)
+5. [Layer 2: Memory Flush Engine](#layer-2-memory-flush-engine)
+6. [Layer 3: Frontend Database](#layer-3-frontend-database)
+7. [Layer 4: Network Sync Engine](#layer-4-network-sync-engine)
+8. [React Integration](#react-integration)
+9. [Implementation Guide](#implementation-guide)
+10. [Usage Examples](#usage-examples)
+11. [Trade-offs & Benefits](#trade-offs--benefits)
 
 ---
 
@@ -53,6 +54,93 @@ store.entities.set("comment-123", newComment); // Sync! (persistence automatic)
 - **🐛 Impossible stale data** - Memory is always the source of truth
 - **⚡ Optimistic by default** - UI updates instantly, sync happens background
 - **🔄 Simple conflict resolution** - Last-write-wins with server authority
+
+---
+
+## Schema Strategy
+
+### Core Philosophy: Schema-Agnostic Sync Engine
+
+**Key Principle**: Kalphite accepts any [Standard Schema](https://standardschema.dev/) compliant validator. Users bring their own schema library preference (Zod, Valibot, ArkType, etc.), Kalphite provides type-safe sync.
+
+### Standard Schema Integration
+
+#### Kalphite Store Configuration
+
+```typescript
+// Kalphite is configured with any Standard Schema compliant validator
+import { z } from "zod";
+import { KalphiteStore } from "./kalphite-store";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+
+// User defines their own entity schema with their preferred library
+const UserEntitySchema = z.discriminatedUnion("type", [
+  z.object({
+    id: z.string(),
+    type: z.literal("comment"),
+    data: z.object({
+      message: z.string(),
+      lineNumber: z.number(),
+      authorId: z.string(),
+    }),
+    updatedAt: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("review"),
+    data: z.object({
+      title: z.string(),
+      status: z.enum(["draft", "pending", "approved"]),
+      authorId: z.string(),
+    }),
+    updatedAt: z.number(),
+  }),
+]);
+
+// Kalphite store accepts any Standard Schema
+const store = new KalphiteStore(UserEntitySchema);
+
+// Full type inference from user's schema
+type Entity = StandardSchemaV1.InferOutput<typeof UserEntitySchema>;
+```
+
+#### Alternative Schema Libraries
+
+```typescript
+// ✅ Using Valibot instead of Zod
+import * as v from "valibot";
+
+const ValibotEntitySchema = v.variant("type", [
+  v.object({
+    id: v.string(),
+    type: v.literal("comment"),
+    data: v.object({
+      message: v.string(),
+      lineNumber: v.number(),
+    }),
+    updatedAt: v.number(),
+  }),
+]);
+
+const store = new KalphiteStore(ValibotEntitySchema);
+```
+
+### Benefits of Schema Agnostic Approach
+
+- **Maximum Flexibility**: Users pick their preferred schema library
+- **Future Proof**: Automatically supports new schema libraries as they implement Standard Schema
+- **Type Safety Everywhere**: TypeScript types derived from user's schema with runtime validation
+- **Zero Lock-in**: Kalphite doesn't dictate validation approach
+
+### Standard Schema Libraries Supported
+
+Per [standardschema.dev](https://standardschema.dev/), Kalphite automatically supports:
+
+- **Zod** (v3.24.0+) - Most popular choice
+- **Valibot** (v1.0+) - Lightweight alternative
+- **ArkType** (v2.0+) - Runtime type checking
+- **Effect Schema** (v3.13.0+) - Functional programming
+- **And many more...**
 
 ---
 
@@ -125,36 +213,59 @@ Other user changes → Server detects → Push notification → Pull triggered �
 ### Core Entity Structure
 
 ```typescript
-interface Entity {
-  id: string;
-  type: string;
-  data: any;
-  updatedAt: number;
-}
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
-class KalphiteStore {
-  private _entities = new Map<string, Entity>();
+// Generic store with schema validation
+class KalphiteStore<TSchema extends StandardSchemaV1> {
+  private _entities = new Map<string, StandardSchemaV1.InferOutput<TSchema>>();
   private subscribers = new Set<() => void>();
   private flushEngine: MemoryFlushEngine;
+  private schema: TSchema;
 
-  constructor(flushEngine: MemoryFlushEngine) {
+  constructor(schema: TSchema, flushEngine: MemoryFlushEngine) {
+    this.schema = schema;
     this.flushEngine = flushEngine;
   }
 
-  // Proxy-wrapped for automatic change detection
+  // Type-safe upsert with schema validation
+  upsert(entityId: string, entity: unknown): void {
+    const result = this.schema["~standard"].validate(entity);
+
+    // Handle async validation if needed
+    if (result instanceof Promise) {
+      result.then((validationResult) => {
+        if (validationResult.issues) {
+          console.error("Validation failed:", validationResult.issues);
+          return;
+        }
+        this._entities.set(entityId, validationResult.value);
+        this.flushEngine.scheduleFlush(entityId, validationResult.value);
+        this.notifySubscribers();
+      });
+      return;
+    }
+
+    // Sync validation
+    if (result.issues) {
+      console.error("Validation failed:", result.issues);
+      return;
+    }
+
+    this._entities.set(entityId, result.value);
+    this.flushEngine.scheduleFlush(entityId, result.value);
+    this.notifySubscribers();
+  }
+
+  // Proxy-wrapped for automatic change detection (legacy direct access)
   get entities() {
     return new Proxy(this._entities, {
       set: (target, prop, value) => {
-        const result = Reflect.set(target, prop, value);
-
+        // Validate before setting
         if (typeof prop === "string" && value) {
-          // Trigger background flush
-          this.flushEngine.scheduleFlush(prop, value);
-          // Notify React components
-          this.notifySubscribers();
+          this.upsert(prop, value);
+          return true;
         }
-
-        return result;
+        return Reflect.set(target, prop, value);
       },
 
       deleteProperty: (target, prop) => {
@@ -171,16 +282,18 @@ class KalphiteStore {
     });
   }
 
-  // Fast synchronous read operations
-  getById(id: string): Entity | null {
+  // Type-safe synchronous read operations
+  getById(id: string): StandardSchemaV1.InferOutput<TSchema> | null {
     return this._entities.get(id) || null;
   }
 
-  getByType(type: string): Entity[] {
-    return Array.from(this._entities.values()).filter((e) => e.type === type);
+  getByType(type: string): StandardSchemaV1.InferOutput<TSchema>[] {
+    return Array.from(this._entities.values()).filter(
+      (e) => (e as any).type === type
+    );
   }
 
-  getAll(): Entity[] {
+  getAll(): StandardSchemaV1.InferOutput<TSchema>[] {
     return Array.from(this._entities.values());
   }
 
@@ -195,9 +308,9 @@ class KalphiteStore {
   }
 
   // Bulk loading from persistence layer
-  loadFromPGlite(entities: Entity[]): void {
+  loadFromPGlite(entities: StandardSchemaV1.InferOutput<TSchema>[]): void {
     entities.forEach((entity) => {
-      this._entities.set(entity.id, entity);
+      this._entities.set((entity as any).id, entity);
     });
     this.notifySubscribers();
   }
@@ -557,12 +670,15 @@ class NetworkSyncEngine {
 
 ```typescript
 import { useSyncExternalStore } from "react";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 // Global store instance
-let store: KalphiteStore;
+let store: KalphiteStore<any>;
 
 // One hook to rule them all
-export function useKalphiteStore(): KalphiteStore {
+export function useKalphiteStore<
+  TSchema extends StandardSchemaV1
+>(): KalphiteStore<TSchema> {
   return useSyncExternalStore(
     store.subscribe,
     () => store, // Return entire store
@@ -570,13 +686,15 @@ export function useKalphiteStore(): KalphiteStore {
   );
 }
 
-// Initialize the store
-export async function initializeStore(): Promise<void> {
+// Initialize the store with schema
+export async function initializeStore<TSchema extends StandardSchemaV1>(
+  schema: TSchema
+): Promise<void> {
   const frontendDb = new FrontendDatabase();
   await frontendDb.initialize();
 
   const flushEngine = new MemoryFlushEngine(frontendDb);
-  store = new MemoryStore(flushEngine);
+  store = new KalphiteStore(schema, flushEngine);
 
   // Load existing data
   const entities = await frontendDb.loadAllEntities();
@@ -602,10 +720,10 @@ const MyComponent = () => {
 
   // Direct mutations trigger full sync flow
   const handleAddComment = () => {
-    store.entities.set(crypto.randomUUID(), {
+    store.upsert(crypto.randomUUID(), {
       id: crypto.randomUUID(),
       type: "comment",
-      data: { message: "Hello!", lineNumber: 42 },
+      data: { message: "Hello!", lineNumber: 42, authorId: "current-user" },
       updatedAt: Date.now(),
     });
   };
@@ -633,14 +751,41 @@ npm install @electric-sql/pglite
 npm install @tanstack/start
 ```
 
-### 2. Initialize Store
+### 2. Initialize Store with Schema
 
 ```typescript
 // app/lib/store.ts
+import { z } from "zod";
 import { initializeStore } from "./kalphite-store";
 
+// Define your entity schema
+const EntitySchema = z.discriminatedUnion("type", [
+  z.object({
+    id: z.string(),
+    type: z.literal("comment"),
+    data: z.object({
+      message: z.string(),
+      lineNumber: z.number(),
+      authorId: z.string(),
+    }),
+    updatedAt: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("review"),
+    data: z.object({
+      title: z.string(),
+      status: z.enum(["draft", "pending", "approved"]),
+      authorId: z.string(),
+    }),
+    updatedAt: z.number(),
+  }),
+]);
+
+export type Entity = z.infer<typeof EntitySchema>;
+
 export async function setupStore() {
-  await initializeStore();
+  await initializeStore(EntitySchema);
 }
 ```
 
@@ -707,13 +852,12 @@ const CommentThread = ({ comments }) => {
   const store = useKalphiteStore();
 
   const addComment = (message: string, lineNumber: number) => {
-    store.entities.set(crypto.randomUUID(), {
+    store.upsert(crypto.randomUUID(), {
       id: crypto.randomUUID(),
       type: "comment",
       data: {
         message,
         lineNumber,
-        filePath: "/src/App.tsx",
         authorId: "current-user",
       },
       updatedAt: Date.now(),
