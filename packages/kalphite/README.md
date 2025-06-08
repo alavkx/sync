@@ -15,7 +15,7 @@ npm install @kalphite/sync-engine
 ## Core Features
 
 - **🚀 Memory-First**: All data lives in memory for instant access
-- **📋 Schema-Agnostic**: Use any Standard Schema library (Zod, Valibot, ArkType, etc.)
+- **📋 Schema-Agnostic**: Works with any Standard Schema compliant library (Zod, Valibot, ArkType, etc.)
 - **⚡ Synchronous Operations**: No async/await complexity in your UI code
 - **🎨 Intuitive API**: `store.comment` instead of `store.getByType("comment")`
 - **🔄 Optimistic Updates**: UI updates instantly, sync happens in background
@@ -117,20 +117,26 @@ function MyComponent() {
 
 ## Schema Libraries
 
-Works with any [Standard Schema](https://standardschema.dev/) library:
+Works with any [Standard Schema](https://standardschema.dev/) compliant library:
 
 ```typescript
-// Zod
+// Zod (v3.24.0+)
 import { z } from "zod";
 const schema = z.discriminatedUnion("type", [...]);
 
-// Valibot
+// Valibot (v1.0+)
 import * as v from "valibot";
 const schema = v.discriminatedUnion("type", [...]);
 
-// ArkType
+// ArkType (v2.0+)
 import { type } from "arktype";
 const schema = type({ type: "comment" | "review", ... });
+
+// Effect Schema (v3.13.0+)
+import * as S from "@effect/schema";
+const schema = S.Union(S.Struct({ type: S.Literal("comment") }), ...);
+
+// All of these implement Standard Schema natively - no adapters needed!
 ```
 
 ## Current Status

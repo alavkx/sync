@@ -1,4 +1,3 @@
-import { ensureZodStandardSchema } from "../../src/adapters/ZodStandardSchemaAdapter";
 import { KalphiteStore } from "../../src/store/KalphiteStore";
 import {
   createProject,
@@ -14,11 +13,9 @@ import {
 // TODO CLI STORE - Kalphite Integration
 // =====================================================
 
-// Convert Zod schema to Standard Schema compliant format
-const standardEntitySchema = ensureZodStandardSchema(EntitySchema);
-
-// Create the Kalphite store with our properly adapted schema
-export const todoStore = KalphiteStore(standardEntitySchema, {
+// Zod schemas are already Standard Schema compliant (v3.24.0+)
+// No adapter needed - pass the schema directly
+export const todoStore = KalphiteStore(EntitySchema, {
   enableDevtools: true,
   logLevel: "info",
 });

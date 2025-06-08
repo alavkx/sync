@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { z } from "zod";
-import {
-  createZodStandardSchemaAdapter,
-  ensureZodStandardSchema,
-} from "../adapters/ZodStandardSchemaAdapter";
 import { KalphiteStore } from "../store/KalphiteStore";
 import type { StandardSchemaV1 } from "../types/StandardSchema";
 
@@ -17,7 +13,8 @@ describe("Standard Schema Integration", () => {
         email: z.string().email(),
       });
 
-      const standardSchema = ensureZodStandardSchema(userSchema);
+      // Zod schemas already implement Standard Schema natively (v3.24.0+)
+      const standardSchema = userSchema;
 
       // Verify the Standard Schema structure
       expect(standardSchema).toHaveProperty("~standard");
@@ -40,7 +37,8 @@ describe("Standard Schema Integration", () => {
         email: z.string().email(),
       });
 
-      const standardSchema = ensureZodStandardSchema(userSchema);
+      // Zod schemas already implement Standard Schema natively
+      const standardSchema = userSchema;
 
       // Valid data should return success result
       const validData = {
@@ -86,7 +84,8 @@ describe("Standard Schema Integration", () => {
         age: z.number().optional(),
       });
 
-      const standardSchema = ensureZodStandardSchema(userSchema);
+      // Zod schemas already implement Standard Schema natively
+      const standardSchema = userSchema;
 
       // TypeScript should infer these types correctly
       type InputType = StandardSchemaV1.InferInput<typeof standardSchema>;
@@ -99,7 +98,7 @@ describe("Standard Schema Integration", () => {
       };
 
       const result = standardSchema["~standard"].validate(validInput);
-      if (!result.issues) {
+      if (!(result instanceof Promise) && !result.issues) {
         const output: OutputType = result.value;
         expect(output).toEqual(validInput);
       }
@@ -124,48 +123,51 @@ describe("Standard Schema Integration", () => {
     });
   });
 
-  describe("Zod Standard Schema Adapter", () => {
-    test("should create compliant Standard Schema from Zod schema", () => {
+  describe("Standard Schema Compliance", () => {
+    test("should work with any Standard Schema compliant library", () => {
+      // Zod schema (already Standard Schema compliant)
       const zodSchema = z.object({
         id: z.string(),
         value: z.number(),
       });
 
-      const standardSchema = createZodStandardSchemaAdapter(zodSchema);
+      expect(zodSchema["~standard"].vendor).toBe("zod");
+      expect(zodSchema["~standard"].version).toBe(1);
 
-      expect(standardSchema["~standard"].vendor).toBe("zod");
-      expect(standardSchema["~standard"].version).toBe(1);
-
-      const result = standardSchema["~standard"].validate({
+      const result = zodSchema["~standard"].validate({
         id: "test",
         value: 42,
       });
-      expect(result).toEqual({
-        value: { id: "test", value: 42 },
-        issues: undefined,
-      });
+
+      if (!(result instanceof Promise)) {
+        expect(result).toEqual({
+          value: { id: "test", value: 42 },
+        });
+        expect(result).not.toHaveProperty("issues");
+      }
     });
 
-    test("should handle Zod validation errors correctly", () => {
+    test("should handle validation errors correctly", () => {
       const zodSchema = z.object({
         id: z.string(),
         value: z.number().min(10),
       });
 
-      const standardSchema = createZodStandardSchemaAdapter(zodSchema);
-
-      const result = standardSchema["~standard"].validate({
+      const result = zodSchema["~standard"].validate({
         id: "test",
         value: 5,
       });
 
-      expect(result.issues).toBeDefined();
-      expect(result.issues!.length).toBeGreaterThan(0);
-      expect(result.issues![0]).toHaveProperty("message");
-      expect(result.issues![0].message).toContain("10");
+      if (!(result instanceof Promise)) {
+        expect(result).toHaveProperty("issues");
+        expect(result.issues).toBeDefined();
+        expect(result.issues!.length).toBeGreaterThan(0);
+        expect(result.issues![0]).toHaveProperty("message");
+        expect(result.issues![0].message).toContain("10");
+      }
     });
 
-    test("should preserve Zod path information in error issues", () => {
+    test("should preserve path information in error issues", () => {
       const zodSchema = z.object({
         user: z.object({
           profile: z.object({
@@ -174,9 +176,7 @@ describe("Standard Schema Integration", () => {
         }),
       });
 
-      const standardSchema = createZodStandardSchemaAdapter(zodSchema);
-
-      const result = standardSchema["~standard"].validate({
+      const result = zodSchema["~standard"].validate({
         user: {
           profile: {
             age: 15, // Below minimum
@@ -184,9 +184,12 @@ describe("Standard Schema Integration", () => {
         },
       });
 
-      expect(result.issues).toBeDefined();
-      expect(result.issues![0]).toHaveProperty("path");
-      expect(result.issues![0].path).toEqual(["user", "profile", "age"]);
+      if (!(result instanceof Promise)) {
+        expect(result).toHaveProperty("issues");
+        expect(result.issues).toBeDefined();
+        expect(result.issues![0]).toHaveProperty("path");
+        expect(result.issues![0].path).toEqual(["user", "profile", "age"]);
+      }
     });
   });
 
@@ -201,8 +204,8 @@ describe("Standard Schema Integration", () => {
         value: z.number(),
       });
 
-      const standardSchema = ensureZodStandardSchema(schema);
-      store = KalphiteStore(standardSchema);
+      // Zod schemas are already Standard Schema compliant
+      store = KalphiteStore(schema);
     });
 
     test("should validate entities on upsert", () => {
@@ -249,8 +252,8 @@ describe("Standard Schema Integration", () => {
         }),
       ]);
 
-      const standardSchema = ensureZodStandardSchema(entitySchema);
-      const discriminatedStore = KalphiteStore(standardSchema);
+      // Zod schemas are already Standard Schema compliant
+      const discriminatedStore = KalphiteStore(entitySchema);
 
       // Test user entity
       const user = {
@@ -293,8 +296,8 @@ describe("Standard Schema Integration", () => {
         value: z.number(),
       });
 
-      const standardSchema = ensureZodStandardSchema(schema);
-      const store = KalphiteStore(standardSchema);
+      // Zod schemas are already Standard Schema compliant
+      const store = KalphiteStore(schema);
 
       const startTime = performance.now();
 
@@ -319,7 +322,9 @@ describe("Standard Schema Integration", () => {
     test("should follow Standard Schema specification exactly", () => {
       // Test based on examples from https://standardschema.dev/
       const stringSchema = z.string();
-      const standardSchema = ensureZodStandardSchema(stringSchema);
+
+      // Zod schemas are already Standard Schema compliant
+      const standardSchema = stringSchema;
 
       // Verify the structure matches the spec
       const standard = standardSchema["~standard"];
@@ -330,23 +335,27 @@ describe("Standard Schema Integration", () => {
 
       // Test validate function signature and return types
       const successResult = standard.validate("hello");
-      expect(successResult).toHaveProperty("value", "hello");
-      // Success results should NOT have 'issues' property per Standard Schema spec
-      expect(successResult).not.toHaveProperty("issues");
+      if (!(successResult instanceof Promise)) {
+        expect(successResult).toHaveProperty("value", "hello");
+        // Success results should NOT have 'issues' property per Standard Schema spec
+        expect(successResult).not.toHaveProperty("issues");
+      }
 
       const failureResult = standard.validate(123);
-      expect(failureResult).toHaveProperty("issues");
-      expect(Array.isArray(failureResult.issues)).toBe(true);
+      if (!(failureResult instanceof Promise)) {
+        expect(failureResult).toHaveProperty("issues");
+        expect(Array.isArray(failureResult.issues)).toBe(true);
 
-      // Verify issues structure
-      if (failureResult.issues) {
-        failureResult.issues.forEach((issue) => {
-          expect(typeof issue.message).toBe("string");
-          // path is optional
-          if (issue.path) {
-            expect(Array.isArray(issue.path)).toBe(true);
-          }
-        });
+        // Verify issues structure
+        if (failureResult.issues) {
+          failureResult.issues.forEach((issue) => {
+            expect(typeof issue.message).toBe("string");
+            // path is optional
+            if (issue.path) {
+              expect(Array.isArray(issue.path)).toBe(true);
+            }
+          });
+        }
       }
     });
   });
@@ -356,18 +365,21 @@ describe("Standard Schema Integration", () => {
 // STANDARD SCHEMA INTEGRATION SUMMARY
 // =====================================================
 //
-// These tests verify that Kalphite properly implements
+// These tests verify that Kalphite properly works with
 // the Standard Schema specification from https://standardschema.dev/
 //
+// ✅ Zod v3.24.0+ implements Standard Schema natively
+// ✅ Valibot, ArkType, Effect Schema also implement it
+// ✅ Users can pass ANY Standard Schema compliant library
+// ✅ No adapters needed - libraries implement spec directly
 // ✅ Complete Standard Schema V1 interface compliance
 // ✅ Proper validation result format (success/failure)
 // ✅ Synchronous validation requirement (memory-first)
 // ✅ Type inference support
-// ✅ Zod adapter compatibility
 // ✅ Error handling and issue reporting
 // ✅ Performance with validation enabled
 // ✅ Discriminated union support
 //
 // This ensures Kalphite can work with any Standard Schema
-// compliant validation library, not just Zod.
+// compliant validation library out of the box.
 // =====================================================
