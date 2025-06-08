@@ -83,23 +83,3 @@ export function loadDemoData() {
   console.log("📝 Demo data loaded successfully!");
   console.log(`Created 1 project, 1 todo, and 1 comment`);
 }
-
-export function createTask(
-  id: string,
-  projectId: string,
-  title: string,
-  description: string
-): Entity {
-  return {
-    id,
-    type: "task",
-    data: {
-      projectId,
-      title,
-      description,
-      status: "pending",
-      priority: "medium",
-    },
-    updatedAt: Date.now(),
-  };
-}

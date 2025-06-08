@@ -160,26 +160,6 @@ export function createTodo(
   };
 }
 
-export function createTask(
-  id: string,
-  projectId: string,
-  title: string,
-  description: string
-): Entity {
-  return {
-    id,
-    type: "task",
-    data: {
-      projectId,
-      title,
-      description,
-      status: "pending",
-      priority: "medium",
-    },
-    updatedAt: Date.now(),
-  };
-}
-
 export function createProject(
   id: string,
   name: string,

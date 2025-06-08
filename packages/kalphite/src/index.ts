@@ -1,7 +1,8 @@
 // Main exports for Kalphite Sync Engine
 export { useKalphiteStore } from "./react/useKalphiteStore";
 export { initializeStore } from "./store/initialize";
-export { KalphiteStore } from "./store/KalphiteStore";
+export { createKalphiteStore } from "./store/KalphiteStore";
+export type { KalphiteStoreType } from "./store/KalphiteStore";
 export { TypedCollection } from "./store/TypedCollection";
 
 // Types
