@@ -21,7 +21,8 @@ interface StorageConfig<
   schema: TSchema;
   mutators: TMutators;
   push: (mutations: TMutation[]) => Promise<void>;
-  pull: () => Promise<TMutation[]>;
+  pull: (lastMutationId: number) => Promise<TMutation[]>;
+  id: string;
 }
 
 export class Storage<
@@ -29,7 +30,6 @@ export class Storage<
   TMutators extends Record<
     string,
     (
-      state: StandardSchemaV1.InferOutput<TSchema>,
       args: Parameters<TMutators[keyof TMutators]>[0]
     ) => StandardSchemaV1.InferOutput<TSchema>
   >,
@@ -37,15 +37,16 @@ export class Storage<
     keyof TMutators,
     Parameters<TMutators[keyof TMutators]>[0]
   >
-> implements StorageConfig<TSchema, TMutators>
-{
-  db = new PGlite("idb://kalphite");
-  memory = new PGlite("memory://kalphite");
+> {
+  id: string;
+  db: PGlite;
+  optimisticDb: PGlite;
   schema: TSchema;
   mutators: TMutators;
   log: TMutation[] = [];
   push: (mutations: TMutation[]) => Promise<void> = async () => {};
-  pull: (lastMutationId: number) => Promise<TMutation[]> = async () => [];
+  pull: (lastMutationId: number) => Promise<TMutation[]> = async () =>
+    [] as TMutation[];
 
   constructor({
     schema,
@@ -57,6 +58,9 @@ export class Storage<
     this.mutators = mutators;
     this.push = push;
     this.pull = pull;
+    this.id = nanoid();
+    this.db = new PGlite("idb://" + this.id);
+    this.optimisticDb = new PGlite("memory://" + this.id);
   }
 
   async close() {

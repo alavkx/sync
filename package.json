@@ -6,7 +6,7 @@
     "dev": "pnpm --filter code-review-app dev",
     "start": "pnpm --filter code-review-app start",
     "build": "pnpm build:lib && pnpm build:app",
-    "build:lib": "pnpm --filter @kalphite/sync-engine build",
+    "build:lib": "pnpm --filter @kalphite/sync build",
     "build:app": "pnpm --filter code-review-app build",
     "test": "pnpm --recursive test",
     "clean": "pnpm --recursive exec rm -rf dist node_modules"

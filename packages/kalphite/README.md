@@ -9,7 +9,7 @@ Part of a monorepo with a demo code review application. See [Development](./docs
 ## Installation
 
 ```bash
-npm install @kalphite/sync-engine
+npm install @kalphite/sync
 ```
 
 ## Core Features
@@ -25,7 +25,7 @@ npm install @kalphite/sync-engine
 
 ```typescript
 import { z } from "zod";
-import { createKalphiteStore } from "@kalphite/sync-engine";
+import { createKalphiteStore } from "@kalphite/sync";
 
 // Define your schema
 const EntitySchema = z.discriminatedUnion("type", [
@@ -82,7 +82,7 @@ store.clear();
 ## React Integration
 
 ```typescript
-import { useKalphiteStore } from "@kalphite/sync-engine";
+import { useKalphiteStore } from "@kalphite/sync";
 
 function MyComponent() {
   const store = useKalphiteStore();
