@@ -22,7 +22,7 @@ interface StorageConfig<
   mutators: TMutators;
   push: (mutations: TMutation[]) => Promise<void>;
   pull: (lastMutationId: number) => Promise<TMutation[]>;
-  id: string;
+  name: string;
 }
 
 export class Storage<
@@ -38,7 +38,7 @@ export class Storage<
     Parameters<TMutators[keyof TMutators]>[0]
   >
 > {
-  id: string;
+  name: string;
   db: PGlite;
   optimisticDb: PGlite;
   schema: TSchema;
@@ -53,18 +53,40 @@ export class Storage<
     mutators,
     push,
     pull,
+    name = "kalphite",
   }: StorageConfig<TSchema, TMutators>) {
     this.schema = schema;
     this.mutators = mutators;
     this.push = push;
     this.pull = pull;
-    this.id = nanoid();
-    this.db = new PGlite("idb://" + this.id);
-    this.optimisticDb = new PGlite("memory://" + this.id);
+    this.name = name;
+    this.db = new PGlite("idb://" + name);
+    this.optimisticDb = new PGlite("memory://" + name);
+  }
+
+  mutate(
+    mutator: keyof TMutators,
+    args: Parameters<TMutators[keyof TMutators]>[0]
+  ) {
+    const mutation = {
+      id: (this.log.at(-1)?.id ?? -1) + 1,
+      type: mutator,
+      args,
+    } satisfies TMutation;
+    this.log.push(mutation);
+    const result = this.mutators[mutator](args);
+    this.optimisticDb.sql`
+      INSERT INTO mutations (id, type, args)
+      VALUES (${mutation.id}, ${mutation.type}, ${mutation.args})
+    `;
+    this.db.sql`
+      INSERT INTO mutations (id, type, args)
+      VALUES (${mutation.id}, ${mutation.type}, ${mutation.args})
+    `;
+    return result;
   }
 
   async close() {
-    await this.db.close();
-    await this.memory.close();
+    await Promise.all([this.db.close(), this.optimisticDb.close()]);
   }
 }
