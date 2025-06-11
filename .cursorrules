@@ -1,0 +1,70 @@
+# Code Style Rules
+
+## Formatting & Density
+
+- Prefer denser code formatting with fewer newlines
+- Newlines should be meaningful and purposeful, not decorative
+- Avoid excessive vertical spacing between related code blocks
+- Combine simple statements on single lines where it improves readability
+- Use inline expressions and compact syntax where appropriate
+
+## Functional Programming
+
+- Prefer functional programming style where reasonable
+- Use immutable patterns and pure functions
+- Favor composition over inheritance
+- Prefer declarative over imperative code
+
+## Comments & Documentation
+
+- Consider comments an expense - use sparingly
+- Only comment exceptional or non-obvious code
+- Explain _why_ something exists, not _what_ it does
+- For debugging: comment out code instead of deleting, with notes about temporary changes
+- Clean up commented debugging code when committing to final approach
+
+## TypeScript & Type Safety
+
+- Leverage TypeScript inference wherever possible
+- Prefer type-first APIs with full inference
+- Use strict typing but avoid excessive type annotations when inference works
+- Favor discriminated unions and branded types for domain modeling
+
+## Code Organization
+
+- Keep related code close together vertically
+- Group imports, types, and implementations compactly
+- Minimize blank lines within logical code blocks
+- Use consistent, compact destructuring patterns
+
+## Examples of Dense vs Sparse:
+
+### Prefer (Dense):
+
+```typescript
+const result = items
+  .filter((item) => item.active)
+  .map((item) => ({ ...item, processed: true }))
+  .sort((a, b) => a.priority - b.priority);
+```
+
+### Avoid (Sparse):
+
+```typescript
+const result = items
+
+  .filter((item) => {
+    return item.active;
+  })
+
+  .map((item) => {
+    return {
+      ...item,
+      processed: true,
+    };
+  })
+
+  .sort((a, b) => {
+    return a.priority - b.priority;
+  });
+```

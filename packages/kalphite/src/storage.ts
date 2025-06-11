@@ -2,7 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import type { StandardSchemaV1 } from "./standard-schema";
 
 interface Mutation<
-  TType extends PropertyKey,
+  TType extends string,
   TArgs extends Record<string, unknown>
 > {
   id: number;
@@ -10,49 +10,63 @@ interface Mutation<
   args: TArgs;
 }
 
+type InferState<TSchema> = TSchema extends StandardSchemaV1<any, infer TOutput>
+  ? TOutput
+  : never;
+
+interface MutatorDefinition<TState, TArgs extends Record<string, unknown>> {
+  (state: TState, args: TArgs): TState;
+}
+
+type MutatorMap<TState> = Record<string, MutatorDefinition<TState, any>>;
+
+type ExtractMutatorArgs<TMutator> = TMutator extends MutatorDefinition<
+  any,
+  infer TArgs
+>
+  ? TArgs
+  : never;
+
+type StorageMutation<TMutators extends MutatorMap<any>> = {
+  [K in keyof TMutators]: Mutation<
+    K & string,
+    ExtractMutatorArgs<TMutators[K]>
+  >;
+}[keyof TMutators];
+
 interface StorageConfig<
   TSchema extends StandardSchemaV1,
-  TMutators extends Record<PropertyKey, (state: TSchema) => TSchema>,
-  TMutation = Mutation<
-    keyof TMutators,
-    Parameters<TMutators[keyof TMutators]>[0]
-  >
+  TMutators extends MutatorMap<InferState<TSchema>>
 > {
   schema: TSchema;
   mutators: TMutators;
-  push: (mutations: TMutation[]) => Promise<void>;
-  pull: (lastMutationId: number) => Promise<TMutation[]>;
-  name: string;
+  push?: (mutations: StorageMutation<TMutators>[]) => Promise<void>;
+  pull?: (lastMutationId: number) => Promise<StorageMutation<TMutators>[]>;
+  name?: string;
 }
 
 export class Storage<
   TSchema extends StandardSchemaV1,
-  TMutators extends Record<
-    string,
-    (
-      args: Parameters<TMutators[keyof TMutators]>[0]
-    ) => StandardSchemaV1.InferOutput<TSchema>
-  >,
-  TMutation = Mutation<
-    keyof TMutators,
-    Parameters<TMutators[keyof TMutators]>[0]
-  >
+  TMutators extends MutatorMap<InferState<TSchema>>
 > {
-  name: string;
-  db: PGlite;
-  optimisticDb: PGlite;
-  schema: TSchema;
-  mutators: TMutators;
-  log: TMutation[] = [];
-  push: (mutations: TMutation[]) => Promise<void> = async () => {};
-  pull: (lastMutationId: number) => Promise<TMutation[]> = async () =>
-    [] as TMutation[];
+  readonly name: string;
+  readonly db: PGlite;
+  readonly optimisticDb: PGlite;
+  readonly schema: TSchema;
+  readonly mutators: TMutators;
+
+  private log: StorageMutation<TMutators>[] = [];
+  private state: InferState<TSchema>;
+  private push: (mutations: StorageMutation<TMutators>[]) => Promise<void>;
+  private pull: (
+    lastMutationId: number
+  ) => Promise<StorageMutation<TMutators>[]>;
 
   constructor({
     schema,
     mutators,
-    push,
-    pull,
+    push = async () => {},
+    pull = async () => [],
     name = "kalphite",
   }: StorageConfig<TSchema, TMutators>) {
     this.schema = schema;
@@ -62,31 +76,120 @@ export class Storage<
     this.name = name;
     this.db = new PGlite("idb://" + name);
     this.optimisticDb = new PGlite("memory://" + name);
+
+    // Initialize with empty state - will be populated from DB or defaults
+    this.state = {} as InferState<TSchema>;
   }
 
-  mutate(
-    mutator: keyof TMutators,
-    args: Parameters<TMutators[keyof TMutators]>[0]
-  ) {
-    const mutation = {
+  mutate<K extends keyof TMutators>(
+    mutator: K,
+    args: ExtractMutatorArgs<TMutators[K]>
+  ): InferState<TSchema> {
+    const mutation: StorageMutation<TMutators> = {
       id: (this.log.at(-1)?.id ?? -1) + 1,
-      type: mutator,
+      type: mutator as string,
       args,
-    } satisfies TMutation;
+    } as StorageMutation<TMutators>;
+
     this.log.push(mutation);
-    const result = this.mutators[mutator](args);
+
+    // Apply mutation to get new state
+    const newState = this.mutators[mutator](this.state, args);
+
+    // Validate against schema
+    const result = this.schema["~standard"].validate(newState);
+    if (result instanceof Promise) {
+      throw new Error(
+        "Async validation not supported in mutate - use async validateAndMutate instead"
+      );
+    }
+    if (result.issues) {
+      throw new Error(
+        `Validation failed: ${result.issues.map((i) => i.message).join(", ")}`
+      );
+    }
+    this.state = result.value as InferState<TSchema>;
+
+    // Persist to both databases
     this.optimisticDb.sql`
       INSERT INTO mutations (id, type, args)
-      VALUES (${mutation.id}, ${mutation.type}, ${mutation.args})
+      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
+      mutation.args
+    )})
     `;
     this.db.sql`
       INSERT INTO mutations (id, type, args)
-      VALUES (${mutation.id}, ${mutation.type}, ${mutation.args})
+      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
+      mutation.args
+    )})
     `;
-    return result;
+
+    return this.state;
   }
 
-  async close() {
+  async validateAndMutate<K extends keyof TMutators>(
+    mutator: K,
+    args: ExtractMutatorArgs<TMutators[K]>
+  ): Promise<InferState<TSchema>> {
+    const mutation: StorageMutation<TMutators> = {
+      id: (this.log.at(-1)?.id ?? -1) + 1,
+      type: mutator as string,
+      args,
+    } as StorageMutation<TMutators>;
+
+    this.log.push(mutation);
+
+    // Apply mutation to get new state
+    const newState = this.mutators[mutator](this.state, args);
+
+    // Validate against schema (handles both sync and async validation)
+    const result = await this.schema["~standard"].validate(newState);
+    if (result.issues) {
+      throw new Error(
+        `Validation failed: ${result.issues.map((i) => i.message).join(", ")}`
+      );
+    }
+    this.state = result.value as InferState<TSchema>;
+
+    // Persist to both databases
+    this.optimisticDb.sql`
+      INSERT INTO mutations (id, type, args)
+      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
+      mutation.args
+    )})
+    `;
+    this.db.sql`
+      INSERT INTO mutations (id, type, args)
+      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
+      mutation.args
+    )})
+    `;
+
+    return this.state;
+  }
+
+  getState(): InferState<TSchema> {
+    return this.state;
+  }
+
+  async sync(): Promise<void> {
+    const lastId = this.log.at(-1)?.id ?? -1;
+    const remoteMutations = await this.pull(lastId);
+
+    for (const mutation of remoteMutations) {
+      if (mutation.id > lastId) {
+        const mutator = this.mutators[mutation.type];
+        if (mutator) {
+          this.state = mutator(this.state, mutation.args);
+          this.log.push(mutation);
+        }
+      }
+    }
+
+    await this.push(this.log.filter((m) => m.id > lastId));
+  }
+
+  async close(): Promise<void> {
     await Promise.all([this.db.close(), this.optimisticDb.close()]);
   }
 }
