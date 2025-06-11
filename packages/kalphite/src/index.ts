@@ -1,1 +1,1 @@
-export * from "./storage";
+export { Storage } from "./storage";

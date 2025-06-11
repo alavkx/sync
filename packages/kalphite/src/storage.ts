@@ -10,10 +10,6 @@ interface Mutation<
   args: TArgs;
 }
 
-type InferState<TSchema> = TSchema extends StandardSchemaV1<any, infer TOutput>
-  ? TOutput
-  : never;
-
 interface MutatorDefinition<TState, TArgs extends Record<string, unknown>> {
   (state: TState, args: TArgs): TState;
 }
@@ -36,7 +32,7 @@ type StorageMutation<TMutators extends MutatorMap<any>> = {
 
 interface StorageConfig<
   TSchema extends StandardSchemaV1,
-  TMutators extends MutatorMap<InferState<TSchema>>
+  TMutators extends MutatorMap<StandardSchemaV1.InferOutput<TSchema>>
 > {
   schema: TSchema;
   mutators: TMutators;
@@ -47,7 +43,7 @@ interface StorageConfig<
 
 export class Storage<
   TSchema extends StandardSchemaV1,
-  TMutators extends MutatorMap<InferState<TSchema>>
+  TMutators extends MutatorMap<StandardSchemaV1.InferOutput<TSchema>>
 > {
   readonly name: string;
   readonly db: PGlite;
@@ -56,7 +52,7 @@ export class Storage<
   readonly mutators: TMutators;
 
   private log: StorageMutation<TMutators>[] = [];
-  private state: InferState<TSchema>;
+  private state: StandardSchemaV1.InferOutput<TSchema>;
   private push: (mutations: StorageMutation<TMutators>[]) => Promise<void>;
   private pull: (
     lastMutationId: number
@@ -78,13 +74,13 @@ export class Storage<
     this.optimisticDb = new PGlite("memory://" + name);
 
     // Initialize with empty state - will be populated from DB or defaults
-    this.state = {} as InferState<TSchema>;
+    this.state = {} as StandardSchemaV1.InferOutput<TSchema>;
   }
 
   mutate<K extends keyof TMutators>(
     mutator: K,
     args: ExtractMutatorArgs<TMutators[K]>
-  ): InferState<TSchema> {
+  ): StandardSchemaV1.InferOutput<TSchema> {
     const mutation: StorageMutation<TMutators> = {
       id: (this.log.at(-1)?.id ?? -1) + 1,
       type: mutator as string,
@@ -108,7 +104,7 @@ export class Storage<
         `Validation failed: ${result.issues.map((i) => i.message).join(", ")}`
       );
     }
-    this.state = result.value as InferState<TSchema>;
+    this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
 
     // Persist to both databases
     this.optimisticDb.sql`
@@ -130,7 +126,7 @@ export class Storage<
   async validateAndMutate<K extends keyof TMutators>(
     mutator: K,
     args: ExtractMutatorArgs<TMutators[K]>
-  ): Promise<InferState<TSchema>> {
+  ): Promise<StandardSchemaV1.InferOutput<TSchema>> {
     const mutation: StorageMutation<TMutators> = {
       id: (this.log.at(-1)?.id ?? -1) + 1,
       type: mutator as string,
@@ -149,7 +145,7 @@ export class Storage<
         `Validation failed: ${result.issues.map((i) => i.message).join(", ")}`
       );
     }
-    this.state = result.value as InferState<TSchema>;
+    this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
 
     // Persist to both databases
     this.optimisticDb.sql`
@@ -168,7 +164,7 @@ export class Storage<
     return this.state;
   }
 
-  getState(): InferState<TSchema> {
+  getState(): StandardSchemaV1.InferOutput<TSchema> {
     return this.state;
   }
 
