@@ -1,11 +1,13 @@
 import { PGlite } from "@electric-sql/pglite";
+import { nanoid } from "nanoid";
 import type { StandardSchemaV1 } from "./standard-schema";
 
 interface Mutation<
   TType extends string,
   TArgs extends Record<string, unknown>
 > {
-  id: number;
+  id: string;
+  index: number;
   type: TType;
   args: TArgs;
 }
@@ -50,6 +52,7 @@ export class Storage<
   private pull: (
     lastMutationId: number
   ) => Promise<StorageMutation<TMutators>[]>;
+  private confirmedMutationIndex = -1;
 
   constructor({
     schema,
@@ -72,9 +75,11 @@ export class Storage<
     args: ExtractMutatorArgs<TMutators[K]>
   ): StandardSchemaV1.InferOutput<TSchema> {
     const mutation: StorageMutation<TMutators> = {
-      id: (this.log.at(-1)?.id ?? -1) + 1,
+      id: nanoid(),
+      index: this.confirmedMutationIndex + 1,
       type: mutator as string,
       args,
+      confirmed: false,
     } as StorageMutation<TMutators>;
     this.log.push(mutation);
     const newState = this.mutators[mutator](this.state, args);
@@ -108,11 +113,10 @@ export class Storage<
     return this.state;
   }
   async sync(): Promise<void> {
-    const lastId = this.log.at(-1)?.id ?? -1;
-    const remoteMutations = await this.pull(lastId);
+    const remoteMutations = await this.pull(this.confirmedMutationIndex);
 
     for (const mutation of remoteMutations) {
-      if (mutation.id > lastId) {
+      if (mutation.index > this.confirmedMutationIndex) {
         const mutator = this.mutators[mutation.type];
         if (mutator) {
           this.state = mutator(this.state, mutation.args);
@@ -121,7 +125,9 @@ export class Storage<
       }
     }
 
-    await this.push(this.log.filter((m) => m.id > lastId));
+    await this.push(
+      this.log.filter((m) => m.index > this.confirmedMutationIndex)
+    );
   }
   async close(): Promise<void> {
     await Promise.all([this.db.close(), this.optimisticDb.close()]);
