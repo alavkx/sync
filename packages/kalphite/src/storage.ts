@@ -10,6 +10,7 @@ interface Mutation<
   index: number;
   type: TType;
   args: TArgs;
+  confirmed: boolean;
 }
 interface MutatorDefinition<TState, TArgs extends Record<string, unknown>> {
   (state: TState, args: TArgs): TState;
@@ -97,11 +98,11 @@ export class Storage<
       confirmed: false,
     } as StorageMutation<TMutators>;
     this.optimisticDb.sql`
-    INSERT INTO mutations (id, index, type, args, confirmed)
-    VALUES (${mutation.id}, ${mutation.index}, ${
+      INSERT INTO mutations (id, index, type, args, confirmed)
+      VALUES (${mutation.id}, ${mutation.index}, ${
       mutation.type as string
     }, ${JSON.stringify(mutation.args)}, ${false})
-  `;
+    `;
     this.log.push(mutation);
     this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
     return this.state;
@@ -110,18 +111,32 @@ export class Storage<
     return this.state;
   }
   async sync(): Promise<void> {
+    const pendingMutations = this.log.filter((m) => !m.confirmed);
     const remoteMutations = await this.pull(this.lastMutationIndex);
-
+    // TODO: Rebase pending mutations on top of remote mutations
+    const _acceptedMutations = await this.push(pendingMutations);
+    // Should I expect push to return the mutations that were accepted?
+    // TODO: Determine if we should use accepted mutations or remote mutations
     for (const mutation of remoteMutations) {
+      mutation.confirmed = true;
       if (mutation.index > this.lastMutationIndex) {
         const mutator = this.mutators[mutation.type];
         if (mutator) {
+          this.db.sql`
+            INSERT INTO mutations (id, index, type, args, confirmed)
+            VALUES (${mutation.id}, ${mutation.index}, ${
+            mutation.type as string
+          }, ${JSON.stringify(mutation.args)}, ${true})
+          `;
           this.state = mutator(this.state, mutation.args);
           this.log.push(mutation);
+          this.lastMutationIndex = Math.max(
+            this.lastMutationIndex,
+            mutation.index
+          );
         }
       }
     }
-
     await this.push(this.log.filter((m) => m.index > this.lastMutationIndex));
   }
   async close(): Promise<void> {
