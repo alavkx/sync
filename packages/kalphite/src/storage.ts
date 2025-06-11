@@ -52,7 +52,7 @@ export class Storage<
   private pull: (
     lastMutationId: number
   ) => Promise<StorageMutation<TMutators>[]>;
-  private confirmedMutationIndex = -1;
+  private lastMutationIndex = -1;
 
   constructor({
     schema,
@@ -74,14 +74,6 @@ export class Storage<
     mutator: K,
     args: ExtractMutatorArgs<TMutators[K]>
   ): StandardSchemaV1.InferOutput<TSchema> {
-    const mutation: StorageMutation<TMutators> = {
-      id: nanoid(),
-      index: this.confirmedMutationIndex + 1,
-      type: mutator as string,
-      args,
-      confirmed: false,
-    } as StorageMutation<TMutators>;
-    this.log.push(mutation);
     const newState = this.mutators[mutator](this.state, args);
     const result = this.schema["~standard"].validate(newState);
     if (result instanceof Promise) {
@@ -91,32 +83,37 @@ export class Storage<
     }
     if (result.issues) {
       throw new Error(
-        `Validation failed: ${result.issues.map((i) => i.message).join(", ")}`
+        `Mutation ${mutator as string} failed validation: ${result.issues
+          .map((i) => i.message)
+          .join(", ")}`
       );
     }
-    this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
+    this.lastMutationIndex += 1;
+    const mutation: StorageMutation<TMutators> = {
+      id: nanoid(),
+      index: this.lastMutationIndex,
+      type: mutator as string,
+      args,
+      confirmed: false,
+    } as StorageMutation<TMutators>;
     this.optimisticDb.sql`
-      INSERT INTO mutations (id, type, args)
-      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
-      mutation.args
-    )})
-    `;
-    this.db.sql`
-      INSERT INTO mutations (id, type, args)
-      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
-      mutation.args
-    )})
-    `;
+    INSERT INTO mutations (id, index, type, args, confirmed)
+    VALUES (${mutation.id}, ${mutation.index}, ${
+      mutation.type as string
+    }, ${JSON.stringify(mutation.args)}, ${false})
+  `;
+    this.log.push(mutation);
+    this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
     return this.state;
   }
   getState(): StandardSchemaV1.InferOutput<TSchema> {
     return this.state;
   }
   async sync(): Promise<void> {
-    const remoteMutations = await this.pull(this.confirmedMutationIndex);
+    const remoteMutations = await this.pull(this.lastMutationIndex);
 
     for (const mutation of remoteMutations) {
-      if (mutation.index > this.confirmedMutationIndex) {
+      if (mutation.index > this.lastMutationIndex) {
         const mutator = this.mutators[mutation.type];
         if (mutator) {
           this.state = mutator(this.state, mutation.args);
@@ -125,9 +122,7 @@ export class Storage<
       }
     }
 
-    await this.push(
-      this.log.filter((m) => m.index > this.confirmedMutationIndex)
-    );
+    await this.push(this.log.filter((m) => m.index > this.lastMutationIndex));
   }
   async close(): Promise<void> {
     await Promise.all([this.db.close(), this.optimisticDb.close()]);
