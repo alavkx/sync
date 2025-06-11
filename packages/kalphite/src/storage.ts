@@ -9,27 +9,22 @@ interface Mutation<
   type: TType;
   args: TArgs;
 }
-
 interface MutatorDefinition<TState, TArgs extends Record<string, unknown>> {
   (state: TState, args: TArgs): TState;
 }
-
 type MutatorMap<TState> = Record<string, MutatorDefinition<TState, any>>;
-
 type ExtractMutatorArgs<TMutator> = TMutator extends MutatorDefinition<
   any,
   infer TArgs
 >
   ? TArgs
   : never;
-
 type StorageMutation<TMutators extends MutatorMap<any>> = {
   [K in keyof TMutators]: Mutation<
     K & string,
     ExtractMutatorArgs<TMutators[K]>
   >;
 }[keyof TMutators];
-
 interface StorageConfig<
   TSchema extends StandardSchemaV1,
   TMutators extends MutatorMap<StandardSchemaV1.InferOutput<TSchema>>
@@ -40,7 +35,6 @@ interface StorageConfig<
   pull?: (lastMutationId: number) => Promise<StorageMutation<TMutators>[]>;
   name?: string;
 }
-
 export class Storage<
   TSchema extends StandardSchemaV1,
   TMutators extends MutatorMap<StandardSchemaV1.InferOutput<TSchema>>
@@ -50,7 +44,6 @@ export class Storage<
   readonly optimisticDb: PGlite;
   readonly schema: TSchema;
   readonly mutators: TMutators;
-
   private log: StorageMutation<TMutators>[] = [];
   private state: StandardSchemaV1.InferOutput<TSchema>;
   private push: (mutations: StorageMutation<TMutators>[]) => Promise<void>;
@@ -72,11 +65,8 @@ export class Storage<
     this.name = name;
     this.db = new PGlite("idb://" + name);
     this.optimisticDb = new PGlite("memory://" + name);
-
-    // Initialize with empty state - will be populated from DB or defaults
     this.state = {} as StandardSchemaV1.InferOutput<TSchema>;
   }
-
   mutate<K extends keyof TMutators>(
     mutator: K,
     args: ExtractMutatorArgs<TMutators[K]>
@@ -86,13 +76,8 @@ export class Storage<
       type: mutator as string,
       args,
     } as StorageMutation<TMutators>;
-
     this.log.push(mutation);
-
-    // Apply mutation to get new state
     const newState = this.mutators[mutator](this.state, args);
-
-    // Validate against schema
     const result = this.schema["~standard"].validate(newState);
     if (result instanceof Promise) {
       throw new Error(
@@ -105,8 +90,6 @@ export class Storage<
       );
     }
     this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
-
-    // Persist to both databases
     this.optimisticDb.sql`
       INSERT INTO mutations (id, type, args)
       VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
@@ -119,55 +102,11 @@ export class Storage<
       mutation.args
     )})
     `;
-
     return this.state;
   }
-
-  async validateAndMutate<K extends keyof TMutators>(
-    mutator: K,
-    args: ExtractMutatorArgs<TMutators[K]>
-  ): Promise<StandardSchemaV1.InferOutput<TSchema>> {
-    const mutation: StorageMutation<TMutators> = {
-      id: (this.log.at(-1)?.id ?? -1) + 1,
-      type: mutator as string,
-      args,
-    } as StorageMutation<TMutators>;
-
-    this.log.push(mutation);
-
-    // Apply mutation to get new state
-    const newState = this.mutators[mutator](this.state, args);
-
-    // Validate against schema (handles both sync and async validation)
-    const result = await this.schema["~standard"].validate(newState);
-    if (result.issues) {
-      throw new Error(
-        `Validation failed: ${result.issues.map((i) => i.message).join(", ")}`
-      );
-    }
-    this.state = result.value as StandardSchemaV1.InferOutput<TSchema>;
-
-    // Persist to both databases
-    this.optimisticDb.sql`
-      INSERT INTO mutations (id, type, args)
-      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
-      mutation.args
-    )})
-    `;
-    this.db.sql`
-      INSERT INTO mutations (id, type, args)
-      VALUES (${mutation.id}, ${mutation.type as string}, ${JSON.stringify(
-      mutation.args
-    )})
-    `;
-
-    return this.state;
-  }
-
   getState(): StandardSchemaV1.InferOutput<TSchema> {
     return this.state;
   }
-
   async sync(): Promise<void> {
     const lastId = this.log.at(-1)?.id ?? -1;
     const remoteMutations = await this.pull(lastId);
@@ -184,7 +123,6 @@ export class Storage<
 
     await this.push(this.log.filter((m) => m.id > lastId));
   }
-
   async close(): Promise<void> {
     await Promise.all([this.db.close(), this.optimisticDb.close()]);
   }
