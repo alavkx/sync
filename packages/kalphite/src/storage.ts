@@ -71,6 +71,13 @@ export class Storage<
     this.optimisticDb = new PGlite("memory://" + name);
     this.state = {} as StandardSchemaV1.InferOutput<TSchema>;
   }
+  async hydrate(state: StandardSchemaV1.InferOutput<TSchema>): Promise<void> {
+    const mutations = await this.pull(0);
+    for (const mutation of mutations) {
+      mutation.confirmed = true;
+      this.state = this.mutators[mutation.type](this.state, mutation.args);
+    }
+  }
   mutate<K extends keyof TMutators>(
     mutator: K,
     args: ExtractMutatorArgs<TMutators[K]>
